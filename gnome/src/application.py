@@ -138,12 +138,13 @@ class LoadingWindow(Adw.ApplicationWindow):
 
 
 class LightingKeyboard(Gtk.DrawingArea):
-    """Decorative keyboard with a subtle traveling backlight animation."""
+    """Reusable keyboard drawing for discovery and local effect previews."""
 
     ROW_LENGTHS = (10, 10, 9, 7)
 
-    def __init__(self):
+    def __init__(self, preview_provider=None):
         super().__init__()
+        self.preview_provider = preview_provider
         self.set_content_width(184)
         self.set_content_height(72)
         self.set_size_request(184, 72)
@@ -154,8 +155,46 @@ class LightingKeyboard(Gtk.DrawingArea):
         self.queue_draw()
         return GLib.SOURCE_CONTINUE
 
-    @classmethod
-    def _draw(cls, _area, context, width, height):
+    @staticmethod
+    def _mix(first, second, amount):
+        return tuple(
+            start + (end - start) * amount
+            for start, end in zip(first, second, strict=True)
+        )
+
+    def _preview_color(self, now):
+        settings = self.preview_provider()
+        if not settings["enabled"]:
+            return (0.08, 0.08, 0.08), 0.28
+        colors = [
+            tuple(channel / 255 for channel in color)
+            for color in settings["colors"]
+        ]
+        effect = settings["effect"]
+        duration = max(settings["duration"], 1) / 1000
+        brightness = settings["brightness"] / 100
+        if effect is LightingEffect.RAINBOW:
+            colors = [
+                (1, 0, 0), (1, 1, 0), (0, 1, 0),
+                (0, 1, 1), (0, 0, 1), (1, 0, 1),
+            ]
+        elif effect is LightingEffect.BREATHING:
+            colors = [item for color in colors for item in (color, (0, 0, 0))]
+        if effect is LightingEffect.PULSE:
+            tempo = max(settings["tempo"], 1)
+            visible = (now * tempo / 18) % 1 < 0.48
+            color = colors[0] if visible else (0, 0, 0)
+        elif len(colors) > 1:
+            position = (now / duration) % len(colors)
+            index = int(position)
+            color = self._mix(
+                colors[index], colors[(index + 1) % len(colors)], position - index
+            )
+        else:
+            color = colors[0]
+        return tuple(channel * brightness for channel in color), 0.92
+
+    def _draw(self, _area, context, width, height):
         now = time.monotonic()
         scale = min(width / 184, height / 72)
         context.save()
@@ -168,21 +207,23 @@ class LightingKeyboard(Gtk.DrawingArea):
         context.stroke()
 
         key_index = 0
-        for row, columns in enumerate(cls.ROW_LENGTHS):
+        preview = self._preview_color(now) if self.preview_provider else None
+        for row, columns in enumerate(self.ROW_LENGTHS):
             key_width = 14
             gap = 3
             row_width = columns * key_width + (columns - 1) * gap
             start_x = (184 - row_width) / 2
             y = 9 + row * 14
             for column in range(columns):
-                phase = now * 2.4 - key_index * 0.32
-                glow = max(0.0, math.sin(phase)) ** 2
-                context.set_source_rgba(
-                    0.21,
-                    0.52,
-                    0.89,
-                    0.16 + 0.78 * glow,
-                )
+                if preview:
+                    color, alpha = preview
+                    context.set_source_rgba(*color, alpha)
+                else:
+                    phase = now * 2.4 - key_index * 0.32
+                    glow = max(0.0, math.sin(phase)) ** 2
+                    context.set_source_rgba(
+                        0.21, 0.52, 0.89, 0.16 + 0.78 * glow
+                    )
                 context.rectangle(start_x + column * 17, y, key_width, 9)
                 context.fill()
                 key_index += 1
@@ -396,6 +437,15 @@ class MainWindow(Adw.ApplicationWindow):
         )
         self.color_panel_subtitle.add_css_class("dim-label")
         color_panel.append(self.color_panel_subtitle)
+        self.keyboard_preview = LightingKeyboard(self._preview_state)
+        self.keyboard_preview.set_content_width(368)
+        self.keyboard_preview.set_content_height(112)
+        self.keyboard_preview.set_size_request(240, 96)
+        self.keyboard_preview.set_hexpand(True)
+        self.keyboard_preview.set_tooltip_text(
+            "Approximate local preview — changes reach the keyboard only after Apply"
+        )
+        color_panel.append(self.keyboard_preview)
         self.color_flow = Gtk.FlowBox()
         self.color_flow.set_selection_mode(Gtk.SelectionMode.NONE)
         self.color_flow.set_halign(Gtk.Align.START)
@@ -607,6 +657,8 @@ class MainWindow(Adw.ApplicationWindow):
         return GLib.SOURCE_REMOVE
 
     def _control_changed(self, *_args):
+        if hasattr(self, "keyboard_preview"):
+            self.keyboard_preview.queue_draw()
         if not self._updating_controls:
             self._edit_generation += 1
             self._set_dirty(True)
@@ -651,6 +703,23 @@ class MainWindow(Adw.ApplicationWindow):
                 else None
             ),
         )
+
+    def _preview_state(self):
+        effect = self.effects[self.effect.get_selected()]
+        colors = [self._button_color(self.color)]
+        if effect in {LightingEffect.MORPH, LightingEffect.BREATHING}:
+            colors.extend(
+                self._button_color(button)
+                for button in self.additional_color_buttons
+            )
+        return {
+            "enabled": self.enabled.get_active(),
+            "effect": effect,
+            "colors": colors,
+            "brightness": round(self.brightness.get_value()),
+            "duration": round(self.duration.get_value()),
+            "tempo": round(self.tempo.get_value()),
+        }
 
     def _profiles_with_current_edits(self):
         profiles = dict(self.profiles)
@@ -802,9 +871,8 @@ class MainWindow(Adw.ApplicationWindow):
             LightingEffect.BREATHING,
             LightingEffect.RAINBOW,
         }
-        self.color_panel_row.set_visible(
-            self.effects[self.effect.get_selected()] is not LightingEffect.RAINBOW
-        )
+        self.color_panel_row.set_visible(True)
+        self.color_flow.set_visible(selected_effect is not LightingEffect.RAINBOW)
         self.duration_row.set_visible(is_animated)
         self.tempo_row.set_visible(
             self.effects[self.effect.get_selected()] is LightingEffect.PULSE
@@ -915,9 +983,14 @@ class MainWindow(Adw.ApplicationWindow):
         elif effect is LightingEffect.BREATHING:
             title = "Breathing colors"
             subtitle = f"{total} colors separated by darkness · drag to reorder"
+        elif effect is LightingEffect.RAINBOW:
+            title = "Rainbow preview"
+            subtitle = "Built-in color sequence"
         else:
             title = "Color"
             subtitle = "Keyboard color"
+        zones = self.backend.capabilities.zone_count
+        subtitle += f" · {zones} lighting {'zone' if zones == 1 else 'zones'}"
         self.color_panel_title.set_label(title)
         self.color_panel_subtitle.set_label(subtitle)
         maximum = 6 if effect is LightingEffect.BREATHING else 12
