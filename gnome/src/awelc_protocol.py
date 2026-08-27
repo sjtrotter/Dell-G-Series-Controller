@@ -1,8 +1,38 @@
+from dataclasses import dataclass
 from typing import Protocol
 
 
 REPORT_SIZE = 33
 REPORT_ID = 0x03
+USER_ANIMATION = 0x21
+POWER_ANIMATION = 0x22
+POWER_ANIMATION_IDS = range(0x5B, 0x61)
+
+
+@dataclass(frozen=True)
+class AnimationAction:
+    effect: int
+    duration: int
+    tempo: int
+    color: tuple[int, int, int]
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.effect <= 0xFF:
+            raise ValueError("effect must fit in one byte")
+        if not 0 <= self.duration <= 0xFFFF:
+            raise ValueError("duration must fit in two bytes")
+        if not 0 <= self.tempo <= 0xFFFF:
+            raise ValueError("tempo must fit in two bytes")
+        if len(self.color) != 3 or any(not 0 <= value <= 0xFF for value in self.color):
+            raise ValueError("color channels must fit in one byte")
+
+    def encode(self) -> bytes:
+        return (
+            bytes((self.effect,))
+            + self.duration.to_bytes(2, "big")
+            + self.tempo.to_bytes(2, "big")
+            + bytes(self.color)
+        )
 
 
 class ProtocolError(RuntimeError):
@@ -67,10 +97,52 @@ class AwElcProtocol:
             raise ValueError("color channels must be between 0 and 255")
         self.exchange(0x27, self._zone_payload(bytes(color), zones))
 
+    def animation_command(self, subcommand: int, animation_id: int) -> None:
+        if not 0 <= subcommand <= 0xFFFF:
+            raise ValueError("animation subcommand must fit in two bytes")
+        if not 0 <= animation_id <= 0xFFFF:
+            raise ValueError("animation ID must fit in two bytes")
+        command = (
+            POWER_ANIMATION if animation_id in POWER_ANIMATION_IDS else USER_ANIMATION
+        )
+        payload = subcommand.to_bytes(2, "big") + animation_id.to_bytes(2, "big")
+        self.exchange(command, payload)
+
+    def start_series(self, zones: tuple[int, ...], loop: bool = True) -> None:
+        payload = bytes((int(loop),)) + len(zones).to_bytes(2, "big") + bytes(zones)
+        self._validate_zones(zones)
+        self.exchange(0x23, payload)
+
+    def add_actions(self, actions: tuple[AnimationAction, ...]) -> None:
+        if not 1 <= len(actions) <= 3:
+            raise ValueError("an action report must contain between one and three actions")
+        self.exchange(0x24, b"".join(action.encode() for action in actions))
+
+    def save_static_animation(
+        self,
+        animation_id: int,
+        color: tuple[int, int, int],
+        zones: tuple[int, ...],
+        duration: int = 0xFFFF,
+        tempo: int = 1,
+    ) -> None:
+        """Replace one animation slot with a looping static-color series."""
+        action = AnimationAction(0, duration, tempo, color)
+        self.animation_command(0x04, animation_id)  # remove
+        self.animation_command(0x01, animation_id)  # start new
+        self.start_series(zones)
+        self.add_actions((action,))
+        self.animation_command(0x02, animation_id)  # finish and save
+        self.animation_command(0x06, animation_id)  # make default
+
     @staticmethod
     def _zone_payload(prefix: bytes, zones: tuple[int, ...]) -> bytes:
+        AwElcProtocol._validate_zones(zones)
+        return prefix + len(zones).to_bytes(2, byteorder="big") + bytes(zones)
+
+    @staticmethod
+    def _validate_zones(zones: tuple[int, ...]) -> None:
         if not zones:
             raise ValueError("at least one zone is required")
         if len(zones) > 0xff or any(not 0 <= zone <= 0xff for zone in zones):
             raise ValueError("zone IDs and count must fit in one byte")
-        return prefix + len(zones).to_bytes(2, byteorder="big") + bytes(zones)

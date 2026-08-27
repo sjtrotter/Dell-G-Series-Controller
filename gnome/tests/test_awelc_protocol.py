@@ -1,6 +1,11 @@
 import unittest
 
-from src.awelc_protocol import AwElcProtocol, ProtocolError, build_report
+from src.awelc_protocol import (
+    AnimationAction,
+    AwElcProtocol,
+    ProtocolError,
+    build_report,
+)
 
 
 class FakeTransport:
@@ -50,6 +55,30 @@ class ProtocolTest(unittest.TestCase):
         reply = bytes((3, 0x26)).ljust(33, b"\0")
         with self.assertRaisesRegex(ProtocolError, "does not match"):
             AwElcProtocol(FakeTransport((reply,))).set_color((255, 0, 0), (0,))
+
+    def test_builds_persistent_static_animation_transaction(self):
+        commands = (0x22, 0x22, 0x23, 0x24, 0x22, 0x22)
+        replies = tuple(bytes((3, command)).ljust(33, b"\0") for command in commands)
+        transport = FakeTransport(replies)
+
+        AwElcProtocol(transport).save_static_animation(0x5D, (255, 0, 0), (0,))
+
+        prefixes = [
+            bytes((3, 0x22, 0, 4, 0, 0x5D)),
+            bytes((3, 0x22, 0, 1, 0, 0x5D)),
+            bytes((3, 0x23, 1, 0, 1, 0)),
+            bytes((3, 0x24, 0, 0xFF, 0xFF, 0, 1, 255, 0, 0)),
+            bytes((3, 0x22, 0, 2, 0, 0x5D)),
+            bytes((3, 0x22, 0, 6, 0, 0x5D)),
+        ]
+        self.assertEqual(
+            [report[: len(prefix)] for report, prefix in zip(transport.reports, prefixes)],
+            prefixes,
+        )
+
+    def test_validates_animation_action_fields(self):
+        with self.assertRaisesRegex(ValueError, "duration"):
+            AnimationAction(0, 0x10000, 1, (255, 0, 0))
 
 
 if __name__ == "__main__":
