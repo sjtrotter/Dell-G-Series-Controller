@@ -169,6 +169,10 @@ class LightingKeyboard(Gtk.DrawingArea):
 
     def _preview_color(self, now):
         settings = self.preview_provider()
+        return self._settings_preview_color(settings, now)
+
+    @staticmethod
+    def _settings_preview_color(settings, now):
         return preview_color(
             enabled=settings["enabled"],
             effect=settings["effect"],
@@ -193,6 +197,8 @@ class LightingKeyboard(Gtk.DrawingArea):
 
         key_index = 0
         preview = self._preview_color(now) if self.preview_provider else None
+        preview_settings = self.preview_provider() if self.preview_provider else {}
+        zone_settings = preview_settings.get("zone_settings", {})
         zone_for_key = {}
         if self.demonstrate_zones and self.layout:
             zone_for_key = {
@@ -210,9 +216,13 @@ class LightingKeyboard(Gtk.DrawingArea):
                 if preview:
                     color, alpha = preview
                     if key_index in zone_for_key:
-                        color = self.ZONE_COLORS[
-                            zone_for_key[key_index] % len(self.ZONE_COLORS)
-                        ]
+                        zone = zone_for_key[key_index]
+                        if zone in zone_settings:
+                            color, alpha = self._settings_preview_color(
+                                zone_settings[zone], now
+                            )
+                        else:
+                            color = self.ZONE_COLORS[zone % len(self.ZONE_COLORS)]
                     context.set_source_rgba(*color, alpha)
                 else:
                     phase = now * 2.4 - key_index * 0.32
@@ -239,6 +249,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.keyboard_layout = layout_for_device(
             platform_id, backend.capabilities.zone_count
         )
+        self.zone_demo = backend.info.platform == "zone-demo"
         self.settings_store = settings_store
         self.profiles = application.profiles
         self.brightness_mode = application.brightness_mode
@@ -355,6 +366,7 @@ class MainWindow(Adw.ApplicationWindow):
         profile_box.append(self.battery_state)
         profile_group.add(profile_box)
         page.add(profile_group)
+        profile_group.set_visible(not self.zone_demo)
 
         lighting_group = Adw.PreferencesGroup(title="Keyboard lighting")
         if self.backend.capabilities.persistent_power_states:
@@ -442,7 +454,20 @@ class MainWindow(Adw.ApplicationWindow):
         )
         self.color_panel_subtitle.add_css_class("dim-label")
         color_panel.append(self.color_panel_subtitle)
-        self.zone_demo = self.backend.info.platform == "zone-demo"
+        self.zone_drafts = (
+            self.backend.zone_settings if self.zone_demo else {}
+        )
+        self.active_zone = 0
+        if self.zone_demo:
+            self.zone_selector = self._toggle_group(
+                tuple(
+                    (str(zone.firmware_id), zone.label)
+                    for zone in self.keyboard_layout.zones
+                )
+            )
+            self.zone_selector.set_active_name("0")
+            self.zone_selector.connect("notify::active-name", self._zone_changed)
+            color_panel.append(self.zone_selector)
         self.keyboard_preview = LightingKeyboard(
             self._preview_state,
             layout=self.keyboard_layout,
@@ -578,6 +603,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.profile_mode.connect("notify::active", self._control_changed)
         self._profile_mode_changed()
         self._effect_changed()
+        if self.zone_demo:
+            self._load_settings_controls(self.zone_drafts[self.active_zone])
         self._refresh_service_status()
         self._service_status_timer = GLib.timeout_add_seconds(
             2, self._refresh_service_status
@@ -624,6 +651,10 @@ class MainWindow(Adw.ApplicationWindow):
 
         def apply_in_background():
             try:
+                if self.zone_demo:
+                    self.zone_drafts[self.active_zone] = settings
+                    for zone, zone_settings in self.zone_drafts.items():
+                        self.backend.apply_zone_lighting(zone, zone_settings)
                 for state, profile_settings in operations:
                     self.backend.apply_power_state(
                         state, profile_settings, brightness_mode
@@ -680,6 +711,8 @@ class MainWindow(Adw.ApplicationWindow):
         return GLib.SOURCE_REMOVE
 
     def _control_changed(self, *_args):
+        if self.zone_demo and not self._updating_controls:
+            self.zone_drafts[self.active_zone] = self._settings_from_controls()
         if hasattr(self, "keyboard_preview"):
             self.keyboard_preview.queue_draw()
         if not self._updating_controls:
@@ -735,7 +768,7 @@ class MainWindow(Adw.ApplicationWindow):
                 self._button_color(button)
                 for button in self.additional_color_buttons
             )
-        return {
+        state = {
             "enabled": self.enabled.get_active(),
             "effect": effect,
             "colors": colors,
@@ -743,6 +776,19 @@ class MainWindow(Adw.ApplicationWindow):
             "duration": round(self.duration.get_value()),
             "tempo": round(self.tempo.get_value()),
         }
+        if self.zone_demo:
+            state["zone_settings"] = {
+                zone: {
+                    "enabled": settings.enabled,
+                    "effect": settings.effect,
+                    "colors": settings.colors,
+                    "brightness": settings.brightness,
+                    "duration": settings.duration or 500,
+                    "tempo": settings.tempo or 100,
+                }
+                for zone, settings in self.zone_drafts.items()
+            }
+        return state
 
     def _profiles_with_current_edits(self):
         profiles = dict(self.profiles)
@@ -1074,11 +1120,18 @@ class MainWindow(Adw.ApplicationWindow):
             "sleep": PowerState.BATTERY_SLEEP,
         }[self.battery_state.get_active_name()]
 
-    def _power_state_changed(self, *_args):
+    def _zone_changed(self, *_args):
+        if self._updating_controls:
+            return
+        self.zone_drafts[self.active_zone] = self._settings_from_controls()
+        self.active_zone = int(self.zone_selector.get_active_name())
+        self._load_settings_controls(self.zone_drafts[self.active_zone])
+        self._edit_generation += 1
+        self._set_dirty(True)
+
+    def _load_settings_controls(self, settings):
         was_updating = self._updating_controls
         self._updating_controls = True
-        state = self._selected_power_state()
-        settings = self.profiles[state]
         self.enabled.set_active(settings.enabled)
         self.effect.set_selected(
             self.effects.index(settings.effect)
@@ -1092,6 +1145,12 @@ class MainWindow(Adw.ApplicationWindow):
         self.tempo.set_value(settings.tempo or 100)
         self._effect_changed()
         self._updating_controls = was_updating
+        if hasattr(self, "keyboard_preview"):
+            self.keyboard_preview.queue_draw()
+
+    def _power_state_changed(self, *_args):
+        state = self._selected_power_state()
+        self._load_settings_controls(self.profiles[state])
 
     @staticmethod
     def _set_color(button, color):

@@ -126,6 +126,21 @@ class DemoBackendTest(unittest.TestCase):
         self.assertEqual(backend.info.zones, 4)
         self.assertEqual(backend.capabilities.zone_count, 4)
         self.assertEqual(backend.info.platform, "zone-demo")
+        self.assertEqual(len(backend.zone_settings), 4)
+
+        replacement = LightingSettings(
+            enabled=True,
+            effect=LightingEffect.STATIC,
+            primary_color=(12, 34, 56),
+            brightness=75,
+        )
+        backend.apply_zone_lighting(2, replacement)
+        self.assertEqual(backend.zone_settings[2], replacement)
+
+    def test_multizone_demo_rejects_unknown_zone(self):
+        backend = DemoBackend(zone_count=4, platform="zone-demo")
+        with self.assertRaisesRegex(ValueError, "unknown lighting zone"):
+            backend.apply_zone_lighting(4, backend.settings)
 
     def test_applies_valid_settings(self):
         backend = DemoBackend()

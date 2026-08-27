@@ -182,6 +182,11 @@ class DemoBackend:
             primary_color=(255, 0, 0),
             brightness=100,
         )
+        palette = ((255, 48, 64), (255, 160, 24), (40, 190, 80), (40, 110, 255))
+        self._zone_settings = {
+            zone: replace(self._settings, primary_color=palette[zone % len(palette)])
+            for zone in range(zone_count)
+        }
 
     @property
     def info(self) -> DeviceInfo:
@@ -194,6 +199,15 @@ class DemoBackend:
     @property
     def settings(self) -> LightingSettings:
         return self._settings
+
+    @property
+    def zone_settings(self) -> dict[int, LightingSettings]:
+        return dict(self._zone_settings)
+
+    def apply_zone_lighting(self, zone: int, settings: LightingSettings) -> None:
+        if zone not in self._zone_settings:
+            raise ValueError(f"unknown lighting zone: {zone}")
+        self._zone_settings[zone] = settings
 
     def apply_lighting(self, settings: LightingSettings) -> None:
         if settings.effect not in self.capabilities.effects:
