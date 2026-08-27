@@ -46,27 +46,16 @@ class AwElcProtocol:
             raise ProtocolError("AW-ELC reported zero lighting zones")
         return platform, zone_count
 
-    def get_animation_directory(self) -> tuple[int, int, bytes]:
-        """Return the animation count, maximum candidate ID, and raw reply."""
+    def get_animation_summary(self) -> tuple[int, int, bytes]:
+        """Return the stored count, firmware-selected animation ID, and reply.
+
+        Existing AW-ELC clients use the second 16-bit field as the ID passed to
+        an animation command (for example, REMOVE).  It is not a directory bound.
+        """
         reply = self.exchange(0x20, bytes((0x03,)))
         count = int.from_bytes(reply[3:5], byteorder="big")
-        maximum_id = int.from_bytes(reply[5:7], byteorder="big")
-        return count, maximum_id, reply
-
-    def get_animation_by_id(self, animation_id: int) -> tuple[int, bool, bytes]:
-        """Read one advertised animation ID without changing it."""
-        if not 0 <= animation_id <= 0xFF:
-            raise ValueError("animation ID must fit in one byte")
-        reply = self.exchange(0x20, bytes((0x04, animation_id)))
-        returned_id = int.from_bytes(reply[3:5], byteorder="big")
-        is_custom = reply[5] == 0
-        return returned_id, is_custom, reply
-
-    def get_animation_by_legacy_id(self, animation_id: int) -> bytes:
-        """Query a 16-bit animation ID used by older AW-ELC firmware."""
-        if not 0 <= animation_id <= 0xFFFF:
-            raise ValueError("legacy animation ID must fit in two bytes")
-        return self.exchange(0x20, bytes((0x04,)) + animation_id.to_bytes(2, "big"))
+        animation_id = int.from_bytes(reply[5:7], byteorder="big")
+        return count, animation_id, reply
 
     def set_dimness(self, dimness: int, zones: tuple[int, ...]) -> None:
         if not 0 <= dimness <= 100:
