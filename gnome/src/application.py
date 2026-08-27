@@ -387,7 +387,7 @@ class MainWindow(Adw.ApplicationWindow):
         )
         self.add_color_row.add_suffix(self.add_color_button)
         self.add_color_row.set_activatable_widget(self.add_color_button)
-        initial_colors = self.backend.settings.colors[1:] or ((0, 0, 255),)
+        initial_colors = self.backend.settings.colors[1:]
         for color in initial_colors:
             self._add_morph_color(color)
         self.morph_colors.add_row(self.add_color_row)
@@ -551,7 +551,7 @@ class MainWindow(Adw.ApplicationWindow):
             brightness=round(self.brightness.get_value()),
             additional_colors=(
                 tuple(self._button_color(button) for button in self.additional_color_buttons)
-                if selected_effect is LightingEffect.MORPH
+                if selected_effect in {LightingEffect.MORPH, LightingEffect.BREATHING}
                 else ()
             ),
             duration=(
@@ -709,14 +709,22 @@ class MainWindow(Adw.ApplicationWindow):
         )
 
     def _effect_changed(self, *_args):
-        is_morph = self.effects[self.effect.get_selected()] is LightingEffect.MORPH
-        is_animated = self.effects[self.effect.get_selected()] in {
+        selected_effect = self.effects[self.effect.get_selected()]
+        is_morph = selected_effect is LightingEffect.MORPH
+        is_breathing = selected_effect is LightingEffect.BREATHING
+        if is_morph and not self.additional_color_buttons:
+            self._add_morph_color((0, 0, 255))
+        self.morph_colors.set_title(
+            "Morph colors" if is_morph else "Breathing colors"
+        )
+        self._update_morph_color_rows()
+        is_animated = selected_effect in {
             LightingEffect.PULSE,
             LightingEffect.MORPH,
             LightingEffect.BREATHING,
             LightingEffect.RAINBOW,
         }
-        self.morph_colors.set_visible(is_morph)
+        self.morph_colors.set_visible(is_morph or is_breathing)
         self.color_row.set_visible(
             self.effects[self.effect.get_selected()] is not LightingEffect.RAINBOW
         )
@@ -727,7 +735,9 @@ class MainWindow(Adw.ApplicationWindow):
         self.animation_timing.set_visible(is_animated)
 
     def _add_color_clicked(self, _button):
-        if len(self.additional_color_buttons) >= 11:
+        selected_effect = self.effects[self.effect.get_selected()]
+        maximum = 6 if selected_effect is LightingEffect.BREATHING else 12
+        if len(self.additional_color_buttons) + 1 >= maximum:
             return
         self.morph_colors.remove(self.add_color_row)
         self._add_morph_color((255, 255, 255))
@@ -736,7 +746,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _add_morph_color(self, color):
         button = Gtk.ColorDialogButton(
-            dialog=Gtk.ColorDialog(title="Morph target color")
+            dialog=Gtk.ColorDialog(title="Animation color")
         )
         self._set_color(button, color)
         row = Adw.ActionRow()
@@ -762,7 +772,8 @@ class MainWindow(Adw.ApplicationWindow):
         self._update_morph_color_rows()
 
     def _remove_morph_color(self, button):
-        if len(self.additional_color_buttons) <= 1:
+        is_morph = self.effects[self.effect.get_selected()] is LightingEffect.MORPH
+        if is_morph and len(self.additional_color_buttons) <= 1:
             return
         index = self.additional_color_buttons.index(button)
         self.morph_colors.remove(self.additional_color_rows[index])
@@ -797,8 +808,12 @@ class MainWindow(Adw.ApplicationWindow):
         total = len(self.additional_color_rows) + 1
         for index, row in enumerate(self.additional_color_rows, start=2):
             row.set_title(f"Color {index}")
-        self.morph_colors.set_subtitle(f"{total} transition colors")
-        self.add_color_button.set_sensitive(total < 12)
+        effect = self.effects[self.effect.get_selected()]
+        label = "breathing" if effect is LightingEffect.BREATHING else "transition"
+        maximum = 6 if effect is LightingEffect.BREATHING else 12
+        self.morph_colors.set_subtitle(f"{total} {label} colors")
+        self.add_color_row.set_subtitle(f"Up to {maximum} colors")
+        self.add_color_button.set_sensitive(total < maximum)
 
     @staticmethod
     def _button_color(button):
@@ -865,7 +880,7 @@ class MainWindow(Adw.ApplicationWindow):
             else 0
         )
         self._set_color(self.color, settings.primary_color)
-        self._set_morph_colors(settings.colors[1:] or ((0, 0, 255),))
+        self._set_morph_colors(settings.colors[1:])
         self.brightness.set_value(settings.brightness)
         self.duration.set_value(settings.duration or 500)
         self.tempo.set_value(settings.tempo or 100)

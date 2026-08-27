@@ -85,6 +85,17 @@ class LightingSettingsTest(unittest.TestCase):
                 brightness=100,
             )
 
+    def test_breathing_rejects_more_than_six_colors(self):
+        with self.assertRaisesRegex(ValueError, "at most six"):
+            LightingSettings(
+                True,
+                LightingEffect.BREATHING,
+                (255, 0, 0),
+                100,
+                additional_colors=((0, 0, 255),) * 6,
+                duration=500,
+            )
+
     def test_rejects_more_than_twelve_colors(self):
         with self.assertRaisesRegex(ValueError, "at most 12"):
             LightingSettings(
@@ -269,6 +280,30 @@ class AwElcBackendTest(unittest.TestCase):
                 ((20, 40, 60), (0, 0, 0)),
                 (0,),
                 500,
+            ),
+        )
+
+    def test_composes_multicolor_breathing_with_black_between_colors(self):
+        protocol = FakeProtocol()
+        backend = AwElcBackend(protocol)
+        settings = LightingSettings(
+            True,
+            LightingEffect.BREATHING,
+            (255, 0, 0),
+            100,
+            additional_colors=((0, 0, 255), (0, 255, 0)),
+            duration=500,
+        )
+        backend.apply_power_state(PowerState.AC_CHARGED, settings)
+        self.assertEqual(
+            protocol.calls[0][2],
+            (
+                (255, 0, 0),
+                (0, 0, 0),
+                (0, 0, 255),
+                (0, 0, 0),
+                (0, 255, 0),
+                (0, 0, 0),
             ),
         )
 

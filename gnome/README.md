@@ -60,6 +60,10 @@ slots while explicitly saving both sleep slots as off. The controller does not
 provide profile inheritance or a fallback slot. Profile brightness offers two
 implementations:
 
+Morph supports up to 12 transition colors. Breathing uses the same verified
+Morph primitive with black inserted between selected colors, supporting up to
+six colors within the verified 12-action bound.
+
 - **Hardware-only color scaling** stores brightness-adjusted RGB values and
   leaves global dimness at full. It works before login and during suspend, but
   low levels lose some RGB precision.

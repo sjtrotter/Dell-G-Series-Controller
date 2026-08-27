@@ -89,6 +89,8 @@ class LightingSettings:
         if self.effect is LightingEffect.MORPH:
             if len(self.colors) < 2:
                 raise ValueError("morph effects require at least two colors")
+        if self.effect is LightingEffect.BREATHING and len(self.colors) > 6:
+            raise ValueError("breathing effects support at most six colors")
         if self.effect in {
             LightingEffect.PULSE,
             LightingEffect.MORPH,
@@ -336,9 +338,14 @@ class AwElcBackend:
                     settings.duration,
                 )
         elif settings.enabled and settings.effect is LightingEffect.BREATHING:
+            breathing_actions = tuple(
+                action
+                for color in settings.colors
+                for action in (color, (0, 0, 0))
+            )
             self._protocol.save_multicolor_morph_animation(
                 animation_id,
-                (settings.primary_color, (0, 0, 0)),
+                breathing_actions,
                 self._zones,
                 settings.duration,
             )
