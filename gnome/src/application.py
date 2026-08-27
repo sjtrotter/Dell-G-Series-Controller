@@ -120,17 +120,19 @@ class LoadingWindow(Adw.ApplicationWindow):
         super().__init__(application=application)
         self.shown_at = time.monotonic()
         self.set_title("Dell G-Series Laptop Keyboard Controller")
-        self.set_default_size(460, 540)
+        self.set_default_size(460, 360)
         toolbar_view = Adw.ToolbarView()
         toolbar_view.add_top_bar(Adw.HeaderBar())
         status = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         status.set_halign(Gtk.Align.CENTER)
         status.set_valign(Gtk.Align.CENTER)
-        status.append(AlienMark())
+        status.append(LightingKeyboard())
         title = Gtk.Label(label="Dell G-Series Keyboard")
         title.add_css_class("title-1")
         status.append(title)
-        status.append(LightingKeyboard())
+        unofficial = Gtk.Label(label="Unofficial community utility")
+        unofficial.add_css_class("dim-label")
+        status.append(unofficial)
         description = Gtk.Label(label="Connecting to keyboard")
         description.add_css_class("dim-label")
         status.append(description)
@@ -140,43 +142,6 @@ class LoadingWindow(Adw.ApplicationWindow):
         status.append(spinner)
         toolbar_view.set_content(status)
         self.set_content(toolbar_view)
-
-
-class AlienMark(Gtk.DrawingArea):
-    """Original tall alien motif for the connection screen."""
-
-    def __init__(self):
-        super().__init__()
-        self.set_content_width(126)
-        self.set_content_height(154)
-        self.set_size_request(126, 154)
-        self.set_draw_func(self._draw)
-
-    @staticmethod
-    def _draw(_area, context, width, height):
-        context.save()
-        context.translate(width / 2, height / 2)
-        context.scale(width / 104, height / 120)
-
-        context.set_source_rgba(1, 1, 1, 0.96)
-        context.move_to(0, -55)
-        context.curve_to(-29, -53, -43, -25, -36, 10)
-        context.curve_to(-31, 36, -13, 54, 0, 57)
-        context.curve_to(13, 54, 31, 36, 36, 10)
-        context.curve_to(43, -25, 29, -53, 0, -55)
-        context.close_path()
-        context.fill()
-
-        context.set_source_rgba(0.08, 0.09, 0.11, 1)
-        for x in (-17, 17):
-            context.save()
-            context.translate(x, 5)
-            context.rotate(-0.2 if x < 0 else 0.2)
-            context.scale(1.0, 1.75)
-            context.arc(0, 0, 6.5, 0, math.tau)
-            context.fill()
-            context.restore()
-        context.restore()
 
 
 class LightingKeyboard(Gtk.DrawingArea):
