@@ -216,6 +216,7 @@ class MainWindow(Adw.ApplicationWindow):
         action_bar.add_css_class("view")
         if self.settings_store is not None:
             configurations = Gtk.MenuButton()
+            self.configurations_menu = configurations
             configurations.set_label("Configurations")
             configurations.set_always_show_arrow(True)
             configurations.set_popover(self._build_configurations_popover())
@@ -661,6 +662,7 @@ class MainWindow(Adw.ApplicationWindow):
         name = getattr(row, "configuration_name", None)
         if name is not None:
             self._load_configuration(name)
+            self.configurations_menu.popdown()
 
     def _load_configuration(self, name):
         profiles, brightness_mode, separate = (
