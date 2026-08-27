@@ -104,7 +104,7 @@ class LoadingWindow(Adw.ApplicationWindow):
         super().__init__(application=application)
         self.shown_at = time.monotonic()
         self.set_title("Dell G-Series Laptop Keyboard Controller")
-        self.set_default_size(460, 300)
+        self.set_default_size(460, 480)
         toolbar_view = Adw.ToolbarView()
         toolbar_view.add_top_bar(Adw.HeaderBar())
         status = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
@@ -133,8 +133,9 @@ class AlienMark(Gtk.DrawingArea):
 
     def __init__(self):
         super().__init__()
-        self.set_content_width(104)
-        self.set_content_height(82)
+        self.set_content_width(156)
+        self.set_content_height(123)
+        self.set_size_request(156, 123)
         self.set_draw_func(self._draw)
 
     @staticmethod
