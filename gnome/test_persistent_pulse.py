@@ -1,9 +1,9 @@
 #!/usr/bin/python3
-"""Explicit one-slot hardware test for color/black AW-ELC pulse actions."""
+"""Explicit one-slot hardware test for one colored AW-ELC pulse action."""
 
 import argparse
 
-from src.awelc_protocol import AC_CHARGED, AwElcProtocol
+from src.awelc_protocol import AC_CHARGED, AnimationAction, AwElcProtocol
 from src.hidraw_transport import HidrawReportTransport
 from src.usb_transport import DeviceAccessError, DeviceNotFoundError
 
@@ -22,7 +22,7 @@ def bounded_integer(name: str, minimum: int, maximum: int):
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="replace AC-charged animation 0x005c with a color/black pulse test"
+        description="replace AC-charged animation 0x005c with a one-action pulse test"
     )
     parser.add_argument("red", type=bounded_integer("red", 0, 255))
     parser.add_argument("green", type=bounded_integer("green", 0, 255))
@@ -47,19 +47,24 @@ def main() -> int:
         protocol = AwElcProtocol(HidrawReportTransport.discover())
         _, zone_count = protocol.get_platform()
         zones = tuple(range(zone_count))
-        protocol.save_pulse_animation(
+        protocol.save_animation(
             AC_CHARGED,
-            (args.red, args.green, args.blue),
+            (
+                AnimationAction(
+                    1,
+                    args.duration,
+                    args.tempo,
+                    (args.red, args.green, args.blue),
+                ),
+            ),
             zones,
-            args.duration,
-            args.tempo,
         )
         protocol.set_dimness(0, zones)
     except (DeviceAccessError, DeviceNotFoundError) as error:
         parser.error(str(error))
 
     print(
-        f"saved color/black pulse RGB({args.red}, {args.green}, {args.blue}), "
+        f"saved one-action pulse RGB({args.red}, {args.green}, {args.blue}), "
         f"duration {args.duration}, tempo {args.tempo}, "
         "to AC-charged animation 0x005c"
     )
