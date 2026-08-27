@@ -198,6 +198,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.brightness_mode = application.brightness_mode
         self.separate_power_profiles = application.separate_power_profiles
         self._updating_controls = True
+        self._apply_in_progress = False
+        self._edit_generation = 0
         self.set_title("Dell G-Series Laptop Keyboard Controller")
         self.set_default_size(620, 640)
 
@@ -221,14 +223,14 @@ class MainWindow(Adw.ApplicationWindow):
             configurations.set_always_show_arrow(True)
             configurations.set_popover(self._build_configurations_popover())
             action_bar.pack_start(configurations)
-            save_configuration = Gtk.Button(label="Save New")
-            save_configuration.set_tooltip_text(
+            self.save_configuration_button = Gtk.Button(label="Save New")
+            self.save_configuration_button.set_tooltip_text(
                 "Save the current settings as a new configuration"
             )
-            save_configuration.connect(
+            self.save_configuration_button.connect(
                 "clicked", self._show_save_configuration_dialog
             )
-            action_bar.pack_start(save_configuration)
+            action_bar.pack_start(self.save_configuration_button)
         self.apply_button = Gtk.Button(label="Apply")
         self.apply_button.add_css_class("suggested-action")
         self.apply_button.set_tooltip_text(
@@ -504,39 +506,93 @@ class MainWindow(Adw.ApplicationWindow):
         return row
 
     def _apply(self, _button):
+        if self._apply_in_progress:
+            return
         settings = self._settings_from_controls()
         power_state = self._selected_power_state()
         brightness_mode = self.brightness_modes[
             self.brightness_method.get_selected()
         ]
         separate_power_profiles = self.profile_mode.get_active()
+        profiles = dict(self.profiles)
         if separate_power_profiles:
-            self.backend.apply_power_state(power_state, settings, brightness_mode)
-            self.profiles[power_state] = settings
+            operations = ((power_state, settings),)
+            profiles[power_state] = settings
         else:
             unified = unified_power_profiles(settings)
-            for state, profile_settings in unified.items():
-                self.backend.apply_power_state(
-                    state, profile_settings, brightness_mode
-                )
-                self.profiles[state] = profile_settings
-        if self.settings_store is not None:
-            self.settings_store.save_profiles(
-                self.profiles,
+            operations = tuple(unified.items())
+            profiles.update(unified)
+        generation = self._edit_generation
+        self._set_apply_in_progress(True)
+
+        def apply_in_background():
+            try:
+                for state, profile_settings in operations:
+                    self.backend.apply_power_state(
+                        state, profile_settings, brightness_mode
+                    )
+                if self.settings_store is not None:
+                    self.settings_store.save_profiles(
+                        profiles,
+                        brightness_mode,
+                        separate_power_profiles,
+                    )
+            except Exception as error:
+                GLib.idle_add(self._apply_failed, str(error))
+                return
+            GLib.idle_add(
+                self._apply_finished,
+                profiles,
                 brightness_mode,
                 separate_power_profiles,
+                generation,
             )
-        self._set_dirty(False)
+
+        threading.Thread(target=apply_in_background, daemon=True).start()
+
+    def _set_apply_in_progress(self, in_progress):
+        self._apply_in_progress = in_progress
+        self.apply_button.set_label("Applying…" if in_progress else "Apply")
+        self.apply_button.set_sensitive(self.dirty and not in_progress)
+        if self.settings_store is not None:
+            self.configurations_menu.set_sensitive(not in_progress)
+            self.save_configuration_button.set_sensitive(not in_progress)
+
+    def _apply_finished(
+        self,
+        profiles,
+        brightness_mode,
+        separate_power_profiles,
+        generation,
+    ):
+        self.profiles = profiles
+        self.brightness_mode = brightness_mode
+        self.separate_power_profiles = separate_power_profiles
+        self._set_apply_in_progress(False)
+        if self._edit_generation == generation:
+            self._set_dirty(False)
         self.toast_overlay.add_toast(Adw.Toast(title="Lighting settings applied"))
+        return GLib.SOURCE_REMOVE
+
+    def _apply_failed(self, message):
+        self._set_apply_in_progress(False)
+        self._set_dirty(True)
+        self.toast_overlay.add_toast(
+            Adw.Toast(title=f"Could not apply lighting: {message}")
+        )
+        return GLib.SOURCE_REMOVE
 
     def _control_changed(self, *_args):
         if not self._updating_controls:
+            self._edit_generation += 1
             self._set_dirty(True)
 
     def _set_dirty(self, dirty):
         self.dirty = dirty
         if hasattr(self, "apply_button"):
-            self.apply_button.set_sensitive(dirty)
+            self.apply_button.set_sensitive(
+                dirty and not self._apply_in_progress
+            )
 
     def _settings_from_controls(self):
         rgba = self.color.get_rgba()
@@ -678,6 +734,7 @@ class MainWindow(Adw.ApplicationWindow):
         )
         self._power_state_changed()
         self._updating_controls = False
+        self._edit_generation += 1
         self._set_dirty(True)
         self.toast_overlay.add_toast(
             Adw.Toast(title=f'Loaded “{name}”; press Apply to use it')

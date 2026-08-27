@@ -20,6 +20,10 @@ keyboard until **Apply** is pressed. Apply remains disabled until the editor
 contains unapplied changes. The configurations popover presents every saved
 item as a directly loadable row with its own delete action.
 
+Controller writes run on a worker thread. During a transaction the Apply button
+shows **Applying…**, duplicate writes and configuration changes are disabled,
+and GTK continues drawing and responding to window events.
+
 Run the interface without accessing hardware:
 
 ```sh
