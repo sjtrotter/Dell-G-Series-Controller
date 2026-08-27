@@ -76,11 +76,7 @@ class BrightnessService:
             return None
         state = detect_power_state(self.power_supply_root)
         settings = self.store.load_profiles()[state]
-        try:
-            modified = self.store.path.stat().st_mtime_ns
-        except OSError:
-            modified = 0
-        signature = (state, settings.brightness, modified)
+        signature = (state, settings.brightness, self.store.revision())
         if signature == self.last_signature:
             return None
         self._connect()

@@ -5,6 +5,8 @@ project(
   default_options: ['prefix=/usr'],
 )
 
+gnome = import('gnome')
+
 runtime_dir = join_paths(get_option('libexecdir'), 'dell-g-series-controller')
 
 install_data(
@@ -13,6 +15,11 @@ install_data(
   'service.py',
   install_dir: runtime_dir,
   install_mode: 'rwxr-xr-x',
+)
+
+install_data(
+  'data/io.github.cemkaya_mpi.dell-g-series-controller.gschema.xml',
+  install_dir: join_paths(get_option('datadir'), 'glib-2.0', 'schemas'),
 )
 
 install_subdir(
@@ -69,3 +76,11 @@ test(
   args: ['-m', 'unittest', 'discover', '-s', meson.current_source_dir() / 'tests'],
   env: ['PYTHONPATH=' + meson.current_source_dir()],
 )
+
+test(
+  'GSettings schema',
+  find_program('glib-compile-schemas'),
+  args: ['--strict', '--dry-run', meson.current_source_dir() / 'data'],
+)
+
+gnome.post_install(glib_compile_schemas: true)

@@ -24,6 +24,21 @@ Controller writes run on a worker thread. During a transaction the Apply button
 shows **Applying…**, duplicate writes and configuration changes are disabled,
 and GTK continues drawing and responding to window events.
 
+## Settings storage
+
+Installed GNOME builds prefer GSettings (normally backed by dconf) using the
+included `io.github.cemkaya_mpi.dell-g-series-controller` schema. If the schema
+or GIO settings support is unavailable, the same versioned document is stored
+as JSON at:
+
+```text
+~/.config/dell-g-series-controller/settings.json
+```
+
+On first use of GSettings, an existing JSON document is imported automatically.
+The JSON file is left in place as a recoverable migration source. Explicit file
+paths used by tests and portable integrations always select the JSON backend.
+
 Run the interface without accessing hardware:
 
 ```sh

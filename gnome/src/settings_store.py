@@ -4,21 +4,86 @@ from pathlib import Path
 
 from .backend import BrightnessMode, LightingEffect, LightingSettings, PowerState
 
+GSETTINGS_SCHEMA_ID = "io.github.cemkaya_mpi.dell-g-series-controller"
+
+
+class JsonDocumentBackend:
+    def __init__(self, path: Path):
+        self.path = path
+
+    def read(self) -> dict:
+        try:
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            return {}
+
+    def write(self, data: dict) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = self.path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        temporary.replace(self.path)
+
+
+class GSettingsDocumentBackend:
+    def __init__(self, settings):
+        self.settings = settings
+
+    @classmethod
+    def discover(cls):
+        try:
+            import gi
+
+            gi.require_version("Gio", "2.0")
+            from gi.repository import Gio
+
+            source = Gio.SettingsSchemaSource.get_default()
+            schema = source.lookup(GSETTINGS_SCHEMA_ID, True) if source else None
+            if schema is None:
+                return None
+            return cls(Gio.Settings.new_full(schema, None, None))
+        except (ImportError, RuntimeError):
+            return None
+
+    def read(self) -> dict:
+        try:
+            data = json.loads(self.settings.get_string("document"))
+            return data if isinstance(data, dict) else {}
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return {}
+
+    def write(self, data: dict) -> None:
+        if not self.settings.set_string("document", json.dumps(data)):
+            raise OSError("GSettings backend rejected the settings update")
+
 
 class LightingSettingsStore:
     """Remember settings locally because AW-ELC 1.1.7 cannot read them back."""
 
-    def __init__(self, path: Path | None = None):
+    def __init__(self, path: Path | None = None, document_backend=None):
+        explicit_path = path is not None
         if path is None:
             config_home = Path(
                 os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")
             )
             path = config_home / "dell-g-series-controller" / "settings.json"
         self.path = path
+        json_backend = JsonDocumentBackend(path)
+        if document_backend is not None:
+            self._backend = document_backend
+        elif explicit_path:
+            self._backend = json_backend
+        else:
+            self._backend = GSettingsDocumentBackend.discover() or json_backend
+        if isinstance(self._backend, GSettingsDocumentBackend):
+            existing = self._backend.read()
+            legacy = json_backend.read()
+            if not existing and legacy:
+                self._backend.write(legacy)
 
     def load(self) -> LightingSettings | None:
         try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
+            data = self._read_document()
             if "profiles" in data:
                 profile = data["profiles"].get(PowerState.AC_CHARGED.name)
                 return self._decode(profile) if profile is not None else None
@@ -32,7 +97,7 @@ class LightingSettingsStore:
     def load_profiles(self) -> dict[PowerState, LightingSettings]:
         defaults = self._default_profiles()
         try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
+            data = self._read_document()
             if "profiles" not in data:
                 legacy = self._decode(data)
                 for state in (
@@ -52,7 +117,7 @@ class LightingSettingsStore:
 
     def load_brightness_mode(self) -> BrightnessMode:
         try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
+            data = self._read_document()
             return BrightnessMode(
                 data.get(
                     "brightness_mode", BrightnessMode.HARDWARE_SCALING.value
@@ -63,7 +128,7 @@ class LightingSettingsStore:
 
     def load_separate_power_profiles(self) -> bool:
         try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
+            data = self._read_document()
             return bool(data.get("separate_power_profiles", True))
         except (OSError, TypeError, ValueError, json.JSONDecodeError):
             return True
@@ -140,20 +205,14 @@ class LightingSettingsStore:
             self._write(data)
 
     def _read_document(self) -> dict:
-        try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
-            return data if isinstance(data, dict) else {}
-        except (OSError, TypeError, ValueError, json.JSONDecodeError):
-            return {}
+        return self._backend.read()
 
     def _write(self, data: dict) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = self.path.with_suffix(".tmp")
-        temporary.write_text(
-            json.dumps(data, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        temporary.replace(self.path)
+        self._backend.write(data)
+
+    def revision(self) -> int:
+        serialized = json.dumps(self._read_document(), sort_keys=True)
+        return hash(serialized)
 
     @staticmethod
     def _encode(settings: LightingSettings) -> dict:

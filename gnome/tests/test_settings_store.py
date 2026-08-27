@@ -1,12 +1,65 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from src.backend import BrightnessMode, LightingEffect, LightingSettings, PowerState
-from src.settings_store import LightingSettingsStore
+from src.settings_store import GSettingsDocumentBackend, LightingSettingsStore
+
+
+class FakeGSettings:
+    def __init__(self, document="{}"):
+        self.document = document
+
+    def get_string(self, key):
+        assert key == "document"
+        return self.document
+
+    def set_string(self, key, value):
+        assert key == "document"
+        self.document = value
+        return True
 
 
 class LightingSettingsStoreTest(unittest.TestCase):
+    def test_round_trips_through_gsettings_document_backend(self):
+        settings = FakeGSettings()
+        store = LightingSettingsStore(
+            document_backend=GSettingsDocumentBackend(settings)
+        )
+        profiles = store.load_profiles()
+        profiles[PowerState.AC_CHARGED] = LightingSettings(
+            True, LightingEffect.STATIC, (9, 8, 7), 66
+        )
+        store.save_profiles(profiles)
+
+        loaded = store.load_profiles()
+        self.assertEqual(loaded[PowerState.AC_CHARGED].primary_color, (9, 8, 7))
+        self.assertIn('"version": 4', settings.document)
+
+    def test_default_store_migrates_existing_json_to_gsettings(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config_home = Path(directory)
+            path = config_home / "dell-g-series-controller" / "settings.json"
+            legacy = LightingSettingsStore(path)
+            legacy.save(
+                LightingSettings(
+                    True, LightingEffect.STATIC, (11, 22, 33), 44
+                )
+            )
+            settings = FakeGSettings()
+            backend = GSettingsDocumentBackend(settings)
+            with patch.dict("os.environ", {"XDG_CONFIG_HOME": directory}):
+                with patch.object(
+                    GSettingsDocumentBackend,
+                    "discover",
+                    return_value=backend,
+                ):
+                    migrated = LightingSettingsStore()
+
+            self.assertEqual(migrated.load().primary_color, (11, 22, 33))
+            self.assertNotEqual(settings.document, "{}")
+
     def test_round_trips_settings(self):
         settings = LightingSettings(
             enabled=True,

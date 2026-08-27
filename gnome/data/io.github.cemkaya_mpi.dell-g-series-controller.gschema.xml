@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema
+    id="io.github.cemkaya_mpi.dell-g-series-controller"
+    path="/io/github/cemkaya_mpi/dell-g-series-controller/">
+    <key name="document" type="s">
+      <default>'{}'</default>
+      <summary>Keyboard lighting configuration</summary>
+      <description>
+        Serialized power-state profiles, brightness behavior, and named
+        configurations for the keyboard controller.
+      </description>
+    </key>
+  </schema>
+</schemalist>
