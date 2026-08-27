@@ -20,9 +20,13 @@ class Application(Adw.Application):
         if settings_store is not None:
             self.profiles = settings_store.load_profiles()
             self.brightness_mode = settings_store.load_brightness_mode()
+            self.separate_power_profiles = (
+                settings_store.load_separate_power_profiles()
+            )
         else:
             self.profiles = {state: backend.settings for state in PowerState}
             self.brightness_mode = BrightnessMode.HARDWARE_SCALING
+            self.separate_power_profiles = True
         self.connect("activate", self.on_activate)
 
     def on_activate(self, _application):
@@ -39,6 +43,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.settings_store = settings_store
         self.profiles = application.profiles
         self.brightness_mode = application.brightness_mode
+        self.separate_power_profiles = application.separate_power_profiles
         self.set_title("Dell G-Series Laptop Keyboard Controller")
         self.set_default_size(620, 640)
 
@@ -56,7 +61,14 @@ class MainWindow(Adw.ApplicationWindow):
         profile_group.set_description(
             "Choose how the keyboard behaves in each power state."
         )
+        self.profile_mode = Adw.SwitchRow(
+            title="Customize by power state",
+            subtitle="Use separate lighting for AC, battery, and sleep states",
+        )
+        self.profile_mode.set_active(self.separate_power_profiles)
+        profile_group.add(self.profile_mode)
         profile_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        self.profile_box = profile_box
         self.power_source = self._toggle_group(
             (("ac", "AC Power"), ("battery", "Battery"))
         )
@@ -262,6 +274,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.power_source.connect("notify::active-name", self._power_source_changed)
         self.ac_state.connect("notify::active-name", self._power_state_changed)
         self.battery_state.connect("notify::active-name", self._power_state_changed)
+        self.profile_mode.connect("notify::active", self._profile_mode_changed)
+        self._profile_mode_changed()
         self._effect_changed()
         self._refresh_service_status()
         self._service_status_timer = GLib.timeout_add_seconds(
@@ -324,10 +338,20 @@ class MainWindow(Adw.ApplicationWindow):
         brightness_mode = self.brightness_modes[
             self.brightness_method.get_selected()
         ]
-        self.backend.apply_power_state(power_state, settings, brightness_mode)
-        self.profiles[power_state] = settings
+        separate_power_profiles = self.profile_mode.get_active()
+        if separate_power_profiles:
+            self.backend.apply_power_state(power_state, settings, brightness_mode)
+            self.profiles[power_state] = settings
+        else:
+            for state in PowerState:
+                self.backend.apply_power_state(state, settings, brightness_mode)
+                self.profiles[state] = settings
         if self.settings_store is not None:
-            self.settings_store.save_profiles(self.profiles, brightness_mode)
+            self.settings_store.save_profiles(
+                self.profiles,
+                brightness_mode,
+                separate_power_profiles,
+            )
         self.toast_overlay.add_toast(Adw.Toast(title="Lighting settings applied"))
 
     def _effect_changed(self, *_args):
@@ -447,6 +471,15 @@ class MainWindow(Adw.ApplicationWindow):
         self.ac_state.set_visible(on_ac)
         self.battery_state.set_visible(not on_ac)
         self._power_state_changed()
+
+    def _profile_mode_changed(self, *_args):
+        separate = self.profile_mode.get_active()
+        self.profile_box.set_visible(separate)
+        if separate:
+            subtitle = "Use separate lighting for AC, battery, and sleep states"
+        else:
+            subtitle = "Apply the same lighting to every firmware power state"
+        self.profile_mode.set_subtitle(subtitle)
 
     def _selected_power_state(self):
         if self.power_source.get_active_name() == "ac":

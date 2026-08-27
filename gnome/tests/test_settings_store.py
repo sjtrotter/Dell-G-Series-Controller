@@ -112,6 +112,22 @@ class LightingSettingsStoreTest(unittest.TestCase):
                 store.load_brightness_mode(), BrightnessMode.EXACT_SERVICE
             )
 
+    def test_round_trips_unified_power_profile_mode(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = LightingSettingsStore(Path(directory) / "settings.json")
+            store.save_profiles(
+                store.load_profiles(),
+                BrightnessMode.HARDWARE_SCALING,
+                separate_power_profiles=False,
+            )
+            self.assertFalse(store.load_separate_power_profiles())
+
+    def test_existing_settings_default_to_separate_power_profiles(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = LightingSettingsStore(Path(directory) / "settings.json")
+            store.save(LightingSettings(True, LightingEffect.STATIC, (1, 2, 3), 100))
+            self.assertTrue(store.load_separate_power_profiles())
+
 
 if __name__ == "__main__":
     unittest.main()

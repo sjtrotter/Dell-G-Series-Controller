@@ -29,7 +29,10 @@ Hardware mode does not invoke `sudo`, reset the USB device, or detach its
 kernel driver. The USB device must be accessible to the current user; a
 narrowly scoped udev rule will be provided with the packaged application.
 The Profile selector edits the controller's AC, battery, sleep, and low-battery
-animation slots independently. Profile brightness offers two implementations:
+animation slots independently. Turning off **Customize by power state** hides
+those selectors and writes the same settings into all six firmware slots; the
+controller does not provide profile inheritance or a fallback slot. Profile
+brightness offers two implementations:
 
 - **Hardware-only color scaling** stores brightness-adjusted RGB values and
   leaves global dimness at full. It works before login and during suspend, but

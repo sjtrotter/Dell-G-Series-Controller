@@ -61,15 +61,24 @@ class LightingSettingsStore:
         except (OSError, TypeError, ValueError, json.JSONDecodeError):
             return BrightnessMode.HARDWARE_SCALING
 
+    def load_separate_power_profiles(self) -> bool:
+        try:
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+            return bool(data.get("separate_power_profiles", True))
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            return True
+
     def save_profiles(
         self,
         profiles: dict[PowerState, LightingSettings],
         brightness_mode: BrightnessMode = BrightnessMode.HARDWARE_SCALING,
+        separate_power_profiles: bool = True,
     ) -> None:
         self._write(
             {
                 "version": 3,
                 "brightness_mode": brightness_mode.value,
+                "separate_power_profiles": separate_power_profiles,
                 "profiles": {
                     state.name: self._encode(settings)
                     for state, settings in profiles.items()
