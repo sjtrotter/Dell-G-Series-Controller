@@ -1,6 +1,12 @@
 import unittest
 
-from src.backend import AwElcBackend, DemoBackend, LightingEffect, LightingSettings
+from src.backend import (
+    AwElcBackend,
+    DemoBackend,
+    LightingEffect,
+    LightingSettings,
+    PowerState,
+)
 
 
 class FakeProtocol:
@@ -182,6 +188,24 @@ class AwElcBackendTest(unittest.TestCase):
             ],
         )
         self.assertEqual(protocol.calls[3], ("dimness", 10, (0,)))
+
+    def test_applies_only_selected_power_state(self):
+        protocol = FakeProtocol()
+        backend = AwElcBackend(protocol)
+        settings = LightingSettings(
+            enabled=True,
+            effect=LightingEffect.STATIC,
+            primary_color=(255, 0, 0),
+            brightness=70,
+        )
+        backend.apply_power_state(PowerState.BATTERY_LOW, settings)
+        self.assertEqual(
+            protocol.calls,
+            [
+                ("save-static", 0x60, (255, 0, 0), (0,)),
+                ("dimness", 30, (0,)),
+            ],
+        )
 
 
 if __name__ == "__main__":

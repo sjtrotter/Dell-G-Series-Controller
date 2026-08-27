@@ -2,7 +2,15 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Protocol, TypeAlias
 
-from .awelc_protocol import AC_CHARGED, AC_CHARGING, DC_ON, AwElcProtocol
+from .awelc_protocol import (
+    AC_CHARGED,
+    AC_CHARGING,
+    AC_SLEEP,
+    DC_LOW,
+    DC_ON,
+    DC_SLEEP,
+    AwElcProtocol,
+)
 from .hidraw_transport import HidrawReportTransport
 
 
@@ -14,6 +22,19 @@ class LightingEffect(Enum):
     PULSE = "pulse"
     MORPH = "morph"
     STATIC_AND_MORPH = "static-and-morph"
+
+
+class PowerState(Enum):
+    AC_SLEEP = ("AC sleep", AC_SLEEP)
+    AC_CHARGED = ("AC charged", AC_CHARGED)
+    AC_CHARGING = ("AC charging", AC_CHARGING)
+    BATTERY_SLEEP = ("Battery sleep", DC_SLEEP)
+    BATTERY_ON = ("Battery on", DC_ON)
+    BATTERY_LOW = ("Battery low", DC_LOW)
+
+    def __init__(self, label: str, animation_id: int):
+        self.label = label
+        self.animation_id = animation_id
 
 
 @dataclass(frozen=True)
@@ -81,6 +102,10 @@ class LightingBackend(Protocol):
 
     def apply_lighting(self, settings: LightingSettings) -> None: ...
 
+    def apply_power_state(
+        self, power_state: PowerState, settings: LightingSettings
+    ) -> None: ...
+
 
 class DemoBackend:
     """In-memory backend used for safe UI development and screenshots."""
@@ -129,6 +154,11 @@ class DemoBackend:
         if settings.effect not in self.capabilities.effects:
             raise ValueError(f"unsupported lighting effect: {settings.effect.value}")
         self._settings = settings
+
+    def apply_power_state(
+        self, _power_state: PowerState, settings: LightingSettings
+    ) -> None:
+        self.apply_lighting(settings)
 
 
 class AwElcBackend:
@@ -192,26 +222,38 @@ class AwElcBackend:
         if settings.effect not in self.capabilities.effects:
             raise ValueError(f"unsupported lighting effect: {settings.effect.value}")
 
-        color = settings.primary_color if settings.enabled else (0, 0, 0)
         for animation_id in (AC_CHARGED, AC_CHARGING, DC_ON):
-            if settings.enabled and settings.effect is LightingEffect.MORPH:
-                self._protocol.save_morph_animation(
-                    animation_id,
-                    settings.primary_color,
-                    settings.secondary_color,
-                    self._zones,
-                    settings.duration,
-                )
-            elif settings.enabled and settings.effect is LightingEffect.PULSE:
-                self._protocol.save_pulse_animation(
-                    animation_id,
-                    settings.primary_color,
-                    self._zones,
-                    settings.duration,
-                    settings.tempo,
-                )
-            else:
-                self._protocol.save_static_animation(animation_id, color, self._zones)
+            self._save_animation(animation_id, settings)
         # AW-ELC dimness is inverse: zero is full brightness.
         self._protocol.set_dimness(100 - settings.brightness, self._zones)
         self._settings = settings
+
+    def apply_power_state(
+        self, power_state: PowerState, settings: LightingSettings
+    ) -> None:
+        if settings.effect not in self.capabilities.effects:
+            raise ValueError(f"unsupported lighting effect: {settings.effect.value}")
+        self._save_animation(power_state.animation_id, settings)
+        self._protocol.set_dimness(100 - settings.brightness, self._zones)
+        self._settings = settings
+
+    def _save_animation(self, animation_id: int, settings: LightingSettings) -> None:
+        color = settings.primary_color if settings.enabled else (0, 0, 0)
+        if settings.enabled and settings.effect is LightingEffect.MORPH:
+            self._protocol.save_morph_animation(
+                animation_id,
+                settings.primary_color,
+                settings.secondary_color,
+                self._zones,
+                settings.duration,
+            )
+        elif settings.enabled and settings.effect is LightingEffect.PULSE:
+            self._protocol.save_pulse_animation(
+                animation_id,
+                settings.primary_color,
+                self._zones,
+                settings.duration,
+                settings.tempo,
+            )
+        else:
+            self._protocol.save_static_animation(animation_id, color, self._zones)

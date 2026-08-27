@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.backend import LightingEffect, LightingSettings
+from src.backend import LightingEffect, LightingSettings, PowerState
 from src.settings_store import LightingSettingsStore
 
 
@@ -52,6 +52,41 @@ class LightingSettingsStoreTest(unittest.TestCase):
             store = LightingSettingsStore(Path(directory) / "settings.json")
             store.save(settings)
             self.assertEqual(store.load(), settings)
+
+    def test_migrates_legacy_setting_to_awake_profiles(self):
+        settings = LightingSettings(
+            enabled=True,
+            effect=LightingEffect.STATIC,
+            primary_color=(10, 20, 30),
+            brightness=65,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            store = LightingSettingsStore(Path(directory) / "settings.json")
+            store.save(settings)
+            profiles = store.load_profiles()
+            self.assertEqual(profiles[PowerState.AC_CHARGED], settings)
+            self.assertEqual(profiles[PowerState.AC_CHARGING], settings)
+            self.assertEqual(profiles[PowerState.BATTERY_ON], settings)
+            self.assertFalse(profiles[PowerState.AC_SLEEP].enabled)
+            self.assertEqual(
+                profiles[PowerState.BATTERY_LOW].effect, LightingEffect.PULSE
+            )
+
+    def test_round_trips_independent_power_profiles(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = LightingSettingsStore(Path(directory) / "settings.json")
+            profiles = store.load_profiles()
+            profiles[PowerState.AC_CHARGING] = LightingSettings(
+                True, LightingEffect.STATIC, (255, 128, 0), 75
+            )
+            store.save_profiles(profiles)
+            loaded = store.load_profiles()
+            self.assertEqual(
+                loaded[PowerState.AC_CHARGING].primary_color, (255, 128, 0)
+            )
+            self.assertNotEqual(
+                loaded[PowerState.AC_CHARGED], loaded[PowerState.AC_CHARGING]
+            )
 
 
 if __name__ == "__main__":
