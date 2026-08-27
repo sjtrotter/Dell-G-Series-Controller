@@ -9,22 +9,24 @@ from .backend import LightingEffect, LightingSettings
 
 
 class Application(Adw.Application):
-    def __init__(self, backend):
+    def __init__(self, backend, settings_store=None):
         super().__init__(application_id="io.github.cemkaya_mpi.DellGSeriesController")
         self.backend = backend
+        self.settings_store = settings_store
         self.connect("activate", self.on_activate)
 
     def on_activate(self, _application):
         window = self.props.active_window
         if window is None:
-            window = MainWindow(self, self.backend)
+            window = MainWindow(self, self.backend, self.settings_store)
         window.present()
 
 
 class MainWindow(Adw.ApplicationWindow):
-    def __init__(self, application, backend):
+    def __init__(self, application, backend, settings_store=None):
         super().__init__(application=application)
         self.backend = backend
+        self.settings_store = settings_store
         self.set_title("Dell G Series Controller")
         self.set_default_size(620, 700)
 
@@ -54,7 +56,8 @@ class MainWindow(Adw.ApplicationWindow):
         lighting_group = Adw.PreferencesGroup(title="Keyboard lighting")
         if self.backend.capabilities.persistent_power_states:
             lighting_group.set_description(
-                "Applied changes persist across lighting timeouts and power states."
+                "Displayed values are remembered locally because firmware 1.1.7 "
+                "cannot read them back. Applied changes persist across timeouts."
             )
         else:
             lighting_group.set_description(
@@ -67,7 +70,13 @@ class MainWindow(Adw.ApplicationWindow):
 
         self.color = Gtk.ColorDialogButton(dialog=Gtk.ColorDialog(title="Keyboard color"))
         rgba = Gdk.RGBA()
-        rgba.red, rgba.green, rgba.blue, rgba.alpha = 1.0, 0.0, 0.0, 1.0
+        red, green, blue = self.backend.settings.primary_color
+        rgba.red, rgba.green, rgba.blue, rgba.alpha = (
+            red / 255,
+            green / 255,
+            blue / 255,
+            1.0,
+        )
         self.color.set_rgba(rgba)
         color_row = Adw.ActionRow(title="Color", subtitle="Static keyboard color")
         color_row.add_suffix(self.color)
@@ -129,12 +138,13 @@ class MainWindow(Adw.ApplicationWindow):
         color = tuple(
             round(channel * 255) for channel in (rgba.red, rgba.green, rgba.blue)
         )
-        self.backend.apply_lighting(
-            LightingSettings(
-                enabled=self.enabled.get_active(),
-                effect=LightingEffect.STATIC,
-                primary_color=color,
-                brightness=round(self.brightness.get_value()),
-            )
+        settings = LightingSettings(
+            enabled=self.enabled.get_active(),
+            effect=LightingEffect.STATIC,
+            primary_color=color,
+            brightness=round(self.brightness.get_value()),
         )
+        self.backend.apply_lighting(settings)
+        if self.settings_store is not None:
+            self.settings_store.save(settings)
         self.toast_overlay.add_toast(Adw.Toast(title="Lighting settings applied"))

@@ -10,6 +10,7 @@ gi.require_version("Gtk", "4.0")
 
 from src.application import Application
 from src.backend import AwElcBackend, DemoBackend
+from src.settings_store import LightingSettingsStore
 from src.usb_transport import DeviceAccessError, DeviceNotFoundError
 
 
@@ -31,14 +32,16 @@ def main():
         parser.error("choose exactly one of --demo or --hardware")
 
     if args.hardware:
+        settings_store = LightingSettingsStore()
         try:
-            backend = AwElcBackend.discover()
+            backend = AwElcBackend.discover(settings_store.load())
         except (DeviceAccessError, DeviceNotFoundError) as error:
             parser.error(str(error))
     else:
         backend = DemoBackend()
+        settings_store = None
 
-    app = Application(backend)
+    app = Application(backend, settings_store)
     return app.run(sys.argv[:1])
 
 

@@ -127,7 +127,12 @@ class DemoBackend:
 class AwElcBackend:
     """Hardware backend using verified persistent AW-ELC commands."""
 
-    def __init__(self, protocol: AwElcProtocol, name: str = "Dell G Series laptop"):
+    def __init__(
+        self,
+        protocol: AwElcProtocol,
+        name: str = "Dell G Series laptop",
+        initial_settings: LightingSettings | None = None,
+    ):
         self._protocol = protocol
         version = protocol.get_version()
         platform, zone_count = protocol.get_platform()
@@ -146,7 +151,7 @@ class AwElcBackend:
             zone_count=zone_count,
         )
         # Firmware 1.1.7 cannot read back the stored animation contents.
-        self._settings = LightingSettings(
+        self._settings = initial_settings or LightingSettings(
             enabled=False,
             effect=LightingEffect.STATIC,
             primary_color=(255, 255, 255),
@@ -154,8 +159,13 @@ class AwElcBackend:
         )
 
     @classmethod
-    def discover(cls) -> "AwElcBackend":
-        return cls(AwElcProtocol(HidrawReportTransport.discover()))
+    def discover(
+        cls, initial_settings: LightingSettings | None = None
+    ) -> "AwElcBackend":
+        return cls(
+            AwElcProtocol(HidrawReportTransport.discover()),
+            initial_settings=initial_settings,
+        )
 
     @property
     def info(self) -> DeviceInfo:
