@@ -1,4 +1,5 @@
 import gi
+import threading
 
 gi.require_version("Adw", "1")
 gi.require_version("Gtk", "4.0")
@@ -13,15 +14,17 @@ from .backend import (
     unified_power_profiles,
 )
 from .service_status import service_is_running
+from .usb_transport import DeviceAccessError, DeviceNotFoundError
 
 
 class Application(Adw.Application):
-    def __init__(self, backend, settings_store=None):
+    def __init__(self, backend, settings_store=None, backend_factory=None):
         application_id = "io.github.cemkaya_mpi.DellGSeriesController"
         if settings_store is None:
             application_id += ".Demo"
         super().__init__(application_id=application_id)
         self.backend = backend
+        self.backend_factory = backend_factory
         self.settings_store = settings_store
         if settings_store is not None:
             self.profiles = settings_store.load_profiles()
@@ -34,12 +37,71 @@ class Application(Adw.Application):
             self.brightness_mode = BrightnessMode.HARDWARE_SCALING
             self.separate_power_profiles = True
         self.connect("activate", self.on_activate)
+        self._discovering = False
 
     def on_activate(self, _application):
         window = self.props.active_window
         if window is None:
+            if self.backend is None:
+                window = LoadingWindow(self)
+                window.present()
+                self._start_discovery(window)
+                return
             window = MainWindow(self, self.backend, self.settings_store)
         window.present()
+
+    def _start_discovery(self, loading_window):
+        if self._discovering:
+            return
+        self._discovering = True
+
+        def discover():
+            try:
+                backend = self.backend_factory()
+            except (DeviceAccessError, DeviceNotFoundError) as error:
+                GLib.idle_add(self._discovery_failed, loading_window, str(error))
+                return
+            GLib.idle_add(self._discovery_finished, loading_window, backend)
+
+        threading.Thread(target=discover, daemon=True).start()
+
+    def _discovery_finished(self, loading_window, backend):
+        self._discovering = False
+        self.backend = backend
+        loading_window.close()
+        MainWindow(self, backend, self.settings_store).present()
+        return GLib.SOURCE_REMOVE
+
+    def _discovery_failed(self, loading_window, message):
+        self._discovering = False
+        dialog = Adw.AlertDialog(
+            heading="Keyboard controller unavailable",
+            body=message,
+        )
+        dialog.add_response("close", "Close")
+        dialog.set_default_response("close")
+        dialog.connect("response", lambda *_args: self.quit())
+        dialog.present(loading_window)
+        return GLib.SOURCE_REMOVE
+
+
+class LoadingWindow(Adw.ApplicationWindow):
+    def __init__(self, application):
+        super().__init__(application=application)
+        self.set_title("Dell G-Series Laptop Keyboard Controller")
+        self.set_default_size(460, 300)
+        toolbar_view = Adw.ToolbarView()
+        toolbar_view.add_top_bar(Adw.HeaderBar())
+        status = Adw.StatusPage(
+            title="Connecting to keyboard",
+            description="Waiting for the Alienware AW-ELC controller",
+            icon_name="input-keyboard-symbolic",
+        )
+        spinner = Adw.Spinner()
+        spinner.set_size_request(32, 32)
+        status.set_child(spinner)
+        toolbar_view.set_content(status)
+        self.set_content(toolbar_view)
 
 
 class MainWindow(Adw.ApplicationWindow):
