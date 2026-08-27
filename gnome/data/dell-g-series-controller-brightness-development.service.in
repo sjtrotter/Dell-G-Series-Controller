@@ -1,10 +1,10 @@
 [Unit]
-Description=Dell G Series keyboard profile brightness
+Description=Dell G Series keyboard profile brightness (development checkout)
 After=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=/usr/libexec/dell-g-series-controller-brightness --verbose
+ExecStart=@PYTHON@ @SERVICE@ --verbose
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true

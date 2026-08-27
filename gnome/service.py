@@ -39,17 +39,22 @@ def detect_power_state(root: Path = Path("/sys/class/power_supply")) -> PowerSta
 
 
 class BrightnessService:
-    def __init__(self, store: LightingSettingsStore, power_supply_root: Path):
+    def __init__(
+        self,
+        store: LightingSettingsStore,
+        power_supply_root: Path,
+        protocol: AwElcProtocol | None = None,
+    ):
         self.store = store
         self.power_supply_root = power_supply_root
-        self.protocol = AwElcProtocol(HidrawReportTransport.discover())
+        self.protocol = protocol or AwElcProtocol(HidrawReportTransport.discover())
         _, zone_count = self.protocol.get_platform()
         self.zones = tuple(range(zone_count))
         self.last_signature = None
 
-    def update(self) -> None:
+    def update(self) -> tuple[PowerState, int] | None:
         if self.store.load_brightness_mode() is not BrightnessMode.EXACT_SERVICE:
-            return
+            return None
         state = detect_power_state(self.power_supply_root)
         settings = self.store.load_profiles()[state]
         try:
@@ -58,15 +63,17 @@ class BrightnessService:
             modified = 0
         signature = (state, settings.brightness, modified)
         if signature == self.last_signature:
-            return
+            return None
         self.protocol.set_dimness(100 - settings.brightness, self.zones)
         self.last_signature = signature
+        return state, settings.brightness
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--once", action="store_true", help="apply once and exit")
     parser.add_argument("--interval", type=float, default=2.0)
+    parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
     if args.interval <= 0:
         parser.error("--interval must be positive")
@@ -87,7 +94,13 @@ def main() -> int:
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     while running:
-        service.update()
+        changed = service.update()
+        if args.verbose and changed is not None:
+            state, brightness = changed
+            print(
+                f"applied {state.label} brightness {brightness}%",
+                flush=True,
+            )
         if args.once:
             break
         time.sleep(args.interval)

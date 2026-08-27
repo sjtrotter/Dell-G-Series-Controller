@@ -42,6 +42,30 @@ For an unpackaged development checkout, test exact brightness once with:
 python3 gnome/service.py --once
 ```
 
+Run it continuously in the foreground on any desktop with:
+
+```sh
+python3 gnome/service.py --verbose
+```
+
+On a systemd desktop, install a user unit pointing at the current development
+checkout and enable it:
+
+```sh
+sh gnome/install-dev-service.sh
+systemctl --user enable --now dell-g-series-controller-brightness.service
+systemctl --user status dell-g-series-controller-brightness.service
+```
+
+This is a user unit: it runs as the logged-in user and never uses `sudo`.
+It is the same long-running foreground service wrapped by systemd, so a timer
+is neither required nor installed. State changes are written to the user
+journal and can be inspected with:
+
+```sh
+journalctl --user -u dell-g-series-controller-brightness.service
+```
+
 The packaged service unit is
 `dell-g-series-controller-brightness.service`. After its executable and unit
 are installed, enable it with:
