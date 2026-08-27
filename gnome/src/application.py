@@ -197,6 +197,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.profiles = application.profiles
         self.brightness_mode = application.brightness_mode
         self.separate_power_profiles = application.separate_power_profiles
+        self._updating_controls = True
         self.set_title("Dell G-Series Laptop Keyboard Controller")
         self.set_default_size(620, 640)
 
@@ -207,6 +208,8 @@ class MainWindow(Adw.ApplicationWindow):
         toolbar_view.add_bottom_bar(self._build_action_bar())
         self.toast_overlay.set_child(toolbar_view)
         self.set_content(self.toast_overlay)
+        self._updating_controls = False
+        self._set_dirty(False)
 
     def _build_action_bar(self):
         action_bar = Gtk.ActionBar()
@@ -245,26 +248,13 @@ class MainWindow(Adw.ApplicationWindow):
         title = Gtk.Label(label="Saved configurations", xalign=0)
         title.add_css_class("heading")
         content.append(title)
-        self.saved_configuration = Gtk.DropDown()
-        self.saved_configuration.set_size_request(240, -1)
-        self.saved_configuration.connect(
-            "notify::selected", self._load_configuration
+        self.configurations_list = Gtk.ListBox()
+        self.configurations_list.add_css_class("boxed-list")
+        self.configurations_list.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.configurations_list.connect(
+            "row-activated", self._configuration_activated
         )
-        content.append(self.saved_configuration)
-
-        actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        actions.set_halign(Gtk.Align.END)
-        self.delete_configuration_button = Gtk.Button(
-            icon_name="user-trash-symbolic"
-        )
-        self.delete_configuration_button.set_tooltip_text(
-            "Delete selected configuration"
-        )
-        self.delete_configuration_button.connect(
-            "clicked", self._confirm_delete_configuration
-        )
-        actions.append(self.delete_configuration_button)
-        content.append(actions)
+        content.append(self.configurations_list)
         popover.set_child(content)
         self._refresh_saved_configurations()
         return popover
@@ -472,13 +462,20 @@ class MainWindow(Adw.ApplicationWindow):
         page.add(device_group)
 
         self.effect.connect("notify::selected", self._effect_changed)
+        self.effect.connect("notify::selected", self._control_changed)
         self.brightness_method.connect(
             "notify::selected", self._brightness_method_changed
         )
+        self.enabled.connect("notify::active", self._control_changed)
+        self.color.connect("notify::rgba", self._control_changed)
+        self.duration.connect("value-changed", self._control_changed)
+        self.tempo.connect("value-changed", self._control_changed)
+        self.brightness.connect("value-changed", self._control_changed)
         self.power_source.connect("notify::active-name", self._power_source_changed)
         self.ac_state.connect("notify::active-name", self._power_state_changed)
         self.battery_state.connect("notify::active-name", self._power_state_changed)
         self.profile_mode.connect("notify::active", self._profile_mode_changed)
+        self.profile_mode.connect("notify::active", self._control_changed)
         self._profile_mode_changed()
         self._effect_changed()
         self._refresh_service_status()
@@ -528,7 +525,17 @@ class MainWindow(Adw.ApplicationWindow):
                 brightness_mode,
                 separate_power_profiles,
             )
+        self._set_dirty(False)
         self.toast_overlay.add_toast(Adw.Toast(title="Lighting settings applied"))
+
+    def _control_changed(self, *_args):
+        if not self._updating_controls:
+            self._set_dirty(True)
+
+    def _set_dirty(self, dirty):
+        self.dirty = dirty
+        if hasattr(self, "apply_button"):
+            self.apply_button.set_sensitive(dirty)
 
     def _settings_from_controls(self):
         rgba = self.color.get_rgba()
@@ -573,29 +580,45 @@ class MainWindow(Adw.ApplicationWindow):
             profiles.update(unified_power_profiles(settings))
         return profiles
 
-    def _refresh_saved_configurations(self, select_name=None):
-        self._refreshing_saved_configurations = True
+    def _refresh_saved_configurations(self):
         self.saved_configuration_names = list(
             self.settings_store.list_saved_configurations()
         )
-        labels = self.saved_configuration_names or ["No saved configurations"]
-        self.saved_configuration.set_model(Gtk.StringList.new(labels))
-        if select_name in self.saved_configuration_names:
-            self.saved_configuration.set_selected(
-                self.saved_configuration_names.index(select_name)
-            )
-        available = bool(self.saved_configuration_names)
-        self.saved_configuration.set_sensitive(available)
-        self.delete_configuration_button.set_sensitive(available)
-        self._refreshing_saved_configurations = False
-
-    def _selected_configuration_name(self):
+        while child := self.configurations_list.get_first_child():
+            self.configurations_list.remove(child)
         if not self.saved_configuration_names:
-            return None
-        selected = self.saved_configuration.get_selected()
-        if selected >= len(self.saved_configuration_names):
-            return None
-        return self.saved_configuration_names[selected]
+            empty = Gtk.Label(label="No saved configurations")
+            empty.add_css_class("dim-label")
+            empty.set_margin_top(12)
+            empty.set_margin_bottom(12)
+            self.configurations_list.append(empty)
+            return
+        for name in self.saved_configuration_names:
+            row = Gtk.ListBoxRow()
+            row.configuration_name = name
+            contents = Gtk.Box(
+                orientation=Gtk.Orientation.HORIZONTAL,
+                spacing=12,
+            )
+            contents.set_margin_top(6)
+            contents.set_margin_bottom(6)
+            contents.set_margin_start(12)
+            contents.set_margin_end(6)
+            label = Gtk.Label(label=name, xalign=0)
+            label.set_hexpand(True)
+            delete = Gtk.Button(icon_name="user-trash-symbolic")
+            delete.add_css_class("flat")
+            delete.set_tooltip_text(f'Delete “{name}”')
+            delete.connect(
+                "clicked",
+                lambda _button, saved_name=name: self._confirm_delete_configuration(
+                    saved_name
+                ),
+            )
+            contents.append(label)
+            contents.append(delete)
+            row.set_child(contents)
+            self.configurations_list.append(row)
 
     def _show_save_configuration_dialog(self, _button):
         dialog = Adw.AlertDialog(
@@ -629,20 +652,21 @@ class MainWindow(Adw.ApplicationWindow):
         except ValueError as error:
             self.toast_overlay.add_toast(Adw.Toast(title=str(error)))
             return
-        self._refresh_saved_configurations(name)
+        self._refresh_saved_configurations()
         self.toast_overlay.add_toast(
             Adw.Toast(title=f'Saved configuration “{name}”')
         )
 
-    def _load_configuration(self, *_args):
-        if getattr(self, "_refreshing_saved_configurations", False):
-            return
-        name = self._selected_configuration_name()
-        if name is None:
-            return
+    def _configuration_activated(self, _list_box, row):
+        name = getattr(row, "configuration_name", None)
+        if name is not None:
+            self._load_configuration(name)
+
+    def _load_configuration(self, name):
         profiles, brightness_mode, separate = (
             self.settings_store.load_configuration(name)
         )
+        self._updating_controls = True
         self.profiles = profiles
         self.brightness_mode = brightness_mode
         self.separate_power_profiles = separate
@@ -651,14 +675,13 @@ class MainWindow(Adw.ApplicationWindow):
             self.brightness_modes.index(brightness_mode)
         )
         self._power_state_changed()
+        self._updating_controls = False
+        self._set_dirty(True)
         self.toast_overlay.add_toast(
             Adw.Toast(title=f'Loaded “{name}”; press Apply to use it')
         )
 
-    def _confirm_delete_configuration(self, _button):
-        name = self._selected_configuration_name()
-        if name is None:
-            return
+    def _confirm_delete_configuration(self, name):
         dialog = Adw.AlertDialog(
             heading="Delete Configuration?",
             body=f'“{name}” will be permanently removed.',
@@ -707,6 +730,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.morph_colors.remove(self.add_color_row)
         self._add_morph_color((255, 255, 255))
         self.morph_colors.add_row(self.add_color_row)
+        self._control_changed()
 
     def _add_morph_color(self, color):
         button = Gtk.ColorDialogButton(
@@ -731,6 +755,7 @@ class MainWindow(Adw.ApplicationWindow):
         row.add_suffix(controls)
         self.additional_color_rows.append(row)
         self.additional_color_buttons.append(button)
+        button.connect("notify::rgba", self._control_changed)
         self.morph_colors.add_row(row)
         self._update_morph_color_rows()
 
@@ -742,6 +767,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.additional_color_rows.pop(index)
         self.additional_color_buttons.pop(index)
         self._update_morph_color_rows()
+        self._control_changed()
 
     def _move_morph_color(self, button, offset):
         buttons = [self.color, *self.additional_color_buttons]
@@ -753,6 +779,7 @@ class MainWindow(Adw.ApplicationWindow):
         second = self._button_color(buttons[target])
         self._set_color(buttons[index], second)
         self._set_color(buttons[target], first)
+        self._control_changed()
 
     def _set_morph_colors(self, colors):
         self.morph_colors.remove(self.add_color_row)
@@ -780,6 +807,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _brightness_method_changed(self, *_args):
         self._refresh_service_status()
+        self._control_changed()
 
     def _refresh_service_status(self):
         exact = (
@@ -824,6 +852,8 @@ class MainWindow(Adw.ApplicationWindow):
         }[self.battery_state.get_active_name()]
 
     def _power_state_changed(self, *_args):
+        was_updating = self._updating_controls
+        self._updating_controls = True
         state = self._selected_power_state()
         settings = self.profiles[state]
         self.enabled.set_active(settings.enabled)
@@ -838,6 +868,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.duration.set_value(settings.duration or 500)
         self.tempo.set_value(settings.tempo or 100)
         self._effect_changed()
+        self._updating_controls = was_updating
 
     @staticmethod
     def _set_color(button, color):

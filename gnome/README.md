@@ -16,7 +16,9 @@ controls are omitted.
 The bottom bar keeps Apply, Configurations, and Save New available while the
 settings page scrolls. Selecting a named configuration loads its complete set
 of AC, battery, and sleep profiles into the editor; it is not written to the
-keyboard until **Apply** is pressed.
+keyboard until **Apply** is pressed. Apply remains disabled until the editor
+contains unapplied changes. The configurations popover presents every saved
+item as a directly loadable row with its own delete action.
 
 Run the interface without accessing hardware:
 
