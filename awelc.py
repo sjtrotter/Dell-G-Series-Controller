@@ -11,9 +11,15 @@ DURATION_BATTERY_LOW = 0xff
 DURATION_MIN = 0x00
 TEMPO_MAX = 0xff
 TEMPO_MIN = 0x01
-ZONES = [0, 1, 2, 3]
-ZONES_KB = [0, 1, 2]
-ZONES_NP = [3]
+
+def get_zones(elc):
+    """Return the zone IDs reported by the controller."""
+    _platform, zone_count = elc.get_platform()
+    if not 1 <= zone_count <= 0xff:
+        raise ValueError(
+            "AW-ELC reported an invalid zone count: {}".format(zone_count)
+        )
+    return list(range(zone_count))
 
 def init_device():
     supportedProducts = [0x0550, 0x0551]
@@ -39,7 +45,9 @@ def init_device():
     elc = Elc(vid, device.idProduct, debug=0)
     return (elc, device)
 
-def apply_action(elc, red, green, blue, duration, tempo, animation=AC_CHARGING, effect=COLOR, zones=ZONES):
+def apply_action(elc, red, green, blue, duration, tempo, animation=AC_CHARGING, effect=COLOR, zones=None):
+    if zones is None:
+        zones = get_zones(elc)
     if (effect == COLOR):
         elc.remove_animation(animation)
         elc.start_new_animation(animation)
@@ -58,14 +66,22 @@ def apply_action(elc, red, green, blue, duration, tempo, animation=AC_CHARGING, 
         elc.set_default_animation(animation)
 
 def apply_action_color_and_morph(elc, red, green, blue, red_morph, green_morph, blue_morph, duration, tempo, animation=AC_CHARGING):
+    zones = get_zones(elc)
+    zones_kb = zones[:3]
+    zones_np = zones[3:]
+    if not zones_np:
+        apply_action(elc, red, green, blue, duration, tempo,
+                     animation, COLOR, zones_kb)
+        return
+
     elc.remove_animation(animation)
     elc.start_new_animation(animation)
-    elc.start_series(ZONES_NP)
+    elc.start_series(zones_np)
     elc.add_action((Action(MORPH, duration, tempo, red_morph, green_morph, blue_morph),Action(MORPH, duration, tempo, green_morph, blue_morph, red_morph),Action(MORPH, duration, tempo, blue_morph, red_morph, green_morph)))
     # elc.finish_save_animation(animation)
     
     # elc.start_new_animation(animation)
-    elc.start_series(ZONES_KB)
+    elc.start_series(zones_kb)
     elc.add_action((Action(COLOR, duration, tempo, red, green, blue),))
     elc.finish_save_animation(animation)
 
@@ -73,10 +89,11 @@ def apply_action_color_and_morph(elc, red, green, blue, red_morph, green_morph, 
 
 
 def battery_flashing(elc):
+    zones = get_zones(elc)
     # Red flashing on battery low.
     elc.remove_animation(DC_LOW)
     elc.start_new_animation(DC_LOW)
-    elc.start_series(ZONES)
+    elc.start_series(zones)
     # Static color, 2 second duration, tempo tempo (who cares?)
     elc.add_action(
         (Action(COLOR, DURATION_BATTERY_LOW, TEMPO_MIN, 255, 0, 0),))
@@ -167,5 +184,5 @@ def remove_animation():
 
 def set_dim(level):
     elc, device = init_device()
-    elc.dim(ZONES,level)
+    elc.dim(get_zones(elc),level)
     device.reset()
