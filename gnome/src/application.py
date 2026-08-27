@@ -1,5 +1,6 @@
 import gi
 import threading
+import time
 
 gi.require_version("Adw", "1")
 gi.require_version("Gtk", "4.0")
@@ -18,6 +19,8 @@ from .usb_transport import DeviceAccessError, DeviceNotFoundError
 
 
 class Application(Adw.Application):
+    MINIMUM_LOADING_SECONDS = 1.25
+
     def __init__(self, backend, settings_store=None, backend_factory=None):
         application_id = "io.github.cemkaya_mpi.DellGSeriesController"
         if settings_store is None:
@@ -66,6 +69,17 @@ class Application(Adw.Application):
         threading.Thread(target=discover, daemon=True).start()
 
     def _discovery_finished(self, loading_window, backend):
+        remaining = self.MINIMUM_LOADING_SECONDS - (
+            time.monotonic() - loading_window.shown_at
+        )
+        if remaining > 0:
+            GLib.timeout_add(
+                max(1, round(remaining * 1000)),
+                self._discovery_finished,
+                loading_window,
+                backend,
+            )
+            return GLib.SOURCE_REMOVE
         self._discovering = False
         self.backend = backend
         loading_window.close()
@@ -88,6 +102,7 @@ class Application(Adw.Application):
 class LoadingWindow(Adw.ApplicationWindow):
     def __init__(self, application):
         super().__init__(application=application)
+        self.shown_at = time.monotonic()
         self.set_title("Dell G-Series Laptop Keyboard Controller")
         self.set_default_size(460, 300)
         toolbar_view = Adw.ToolbarView()
