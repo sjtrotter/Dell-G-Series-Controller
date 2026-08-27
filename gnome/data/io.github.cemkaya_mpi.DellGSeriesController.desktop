@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Dell G-Series Laptop Keyboard Controller
+Comment=Configure keyboard lighting for supported Dell G-Series laptops
+Exec=dell-g-series-controller
+Icon=io.github.cemkaya_mpi.DellGSeriesController
+Terminal=false
+Categories=Settings;HardwareSettings;
+Keywords=keyboard;lighting;backlight;Dell;Alienware;
+StartupNotify=true

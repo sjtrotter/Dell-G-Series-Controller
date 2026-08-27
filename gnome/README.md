@@ -105,3 +105,18 @@ USB re-enumeration, and suspend/resume. Brightness persistence is currently
 treated as a platform capability: global dimness is known to be volatile on
 firmware 1.1.7/platform `0x0e09`, but must be verified independently on other
 AW-ELC firmware and platform combinations.
+
+## Packaging test
+
+The GNOME frontend has an isolated Meson project. Build, test, and stage an
+installation without modifying the host system:
+
+```sh
+meson setup gnome/_build gnome
+meson test -C gnome/_build
+DESTDIR="$PWD/gnome/_stage" meson install -C gnome/_build
+```
+
+The staged tree contains the application launcher, runtime, desktop entry,
+AppStream metadata, icon, systemd user unit, and udev rule. Installing the
+staged files system-wide is intentionally a separate packaging step.
