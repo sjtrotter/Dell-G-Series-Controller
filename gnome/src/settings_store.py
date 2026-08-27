@@ -68,7 +68,7 @@ class LightingSettingsStore:
     ) -> None:
         self._write(
             {
-                "version": 2,
+                "version": 3,
                 "brightness_mode": brightness_mode.value,
                 "profiles": {
                     state.name: self._encode(settings)
@@ -98,24 +98,38 @@ class LightingSettingsStore:
                 if settings.secondary_color is not None
                 else None
             ),
+            "colors": (
+                [list(color) for color in settings.colors]
+                if settings.additional_colors
+                else None
+            ),
             "duration": settings.duration,
             "tempo": settings.tempo,
         }
 
     @staticmethod
     def _decode(data: dict) -> LightingSettings:
-        return LightingSettings(
-            enabled=bool(data["enabled"]),
-            effect=LightingEffect(data["effect"]),
-            primary_color=tuple(data["primary_color"]),
-            brightness=int(data["brightness"]),
-            secondary_color=(
+        colors = tuple(tuple(color) for color in (data.get("colors") or ()))
+        primary_color = colors[0] if colors else tuple(data["primary_color"])
+        if len(colors) > 1:
+            secondary_color = None
+            additional_colors = colors[1:]
+        else:
+            secondary_color = (
                 tuple(data["secondary_color"])
                 if data.get("secondary_color") is not None
                 else None
-            ),
+            )
+            additional_colors = ()
+        return LightingSettings(
+            enabled=bool(data["enabled"]),
+            effect=LightingEffect(data["effect"]),
+            primary_color=primary_color,
+            brightness=int(data["brightness"]),
+            secondary_color=secondary_color,
             duration=(int(data["duration"]) if data.get("duration") is not None else None),
             tempo=(int(data["tempo"]) if data.get("tempo") is not None else None),
+            additional_colors=additional_colors,
         )
 
     @staticmethod

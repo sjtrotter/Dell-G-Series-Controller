@@ -21,6 +21,8 @@ class LightingEffect(Enum):
     STATIC = "static"
     PULSE = "pulse"
     MORPH = "morph"
+    BREATHING = "breathing"
+    RAINBOW = "rainbow"
     STATIC_AND_MORPH = "static-and-morph"
 
 
@@ -72,22 +74,40 @@ class LightingSettings:
     secondary_color: RgbColor | None = None
     duration: int | None = None
     tempo: int | None = None
+    additional_colors: tuple[RgbColor, ...] = ()
 
     def __post_init__(self) -> None:
         self._validate_color("primary_color", self.primary_color)
         if self.secondary_color is not None:
             self._validate_color("secondary_color", self.secondary_color)
+        for index, color in enumerate(self.additional_colors, start=2):
+            self._validate_color(f"additional_colors[{index}]", color)
+        if len(self.colors) > 12:
+            raise ValueError("animations support at most 12 colors")
         if not 0 <= self.brightness <= 100:
             raise ValueError("brightness must be between 0 and 100")
         if self.effect is LightingEffect.MORPH:
-            if self.secondary_color is None:
-                raise ValueError("morph effects require a secondary color")
-        if self.effect in {LightingEffect.PULSE, LightingEffect.MORPH}:
+            if len(self.colors) < 2:
+                raise ValueError("morph effects require at least two colors")
+        if self.effect in {
+            LightingEffect.PULSE,
+            LightingEffect.MORPH,
+            LightingEffect.BREATHING,
+            LightingEffect.RAINBOW,
+        }:
             if self.duration is None or self.duration < 1:
                 raise ValueError("animated effects require a positive duration")
         if self.effect is LightingEffect.PULSE:
             if self.tempo is None or not 1 <= self.tempo <= 255:
                 raise ValueError("pulse effects require a tempo between 1 and 255")
+
+    @property
+    def colors(self) -> tuple[RgbColor, ...]:
+        if self.additional_colors:
+            return (self.primary_color, *self.additional_colors)
+        if self.secondary_color is not None:
+            return (self.primary_color, self.secondary_color)
+        return (self.primary_color,)
 
     @staticmethod
     def _validate_color(name: str, color: RgbColor) -> None:
@@ -132,6 +152,8 @@ class DemoBackend:
                     LightingEffect.STATIC,
                     LightingEffect.PULSE,
                     LightingEffect.MORPH,
+                    LightingEffect.BREATHING,
+                    LightingEffect.RAINBOW,
                     LightingEffect.STATIC_AND_MORPH,
                 }
             ),
@@ -194,7 +216,13 @@ class AwElcBackend:
         )
         self._capabilities = LightingCapabilities(
             effects=frozenset(
-                {LightingEffect.STATIC, LightingEffect.PULSE, LightingEffect.MORPH}
+                {
+                    LightingEffect.STATIC,
+                    LightingEffect.PULSE,
+                    LightingEffect.MORPH,
+                    LightingEffect.BREATHING,
+                    LightingEffect.RAINBOW,
+                }
             ),
             brightness=True,
             persistent_power_states=True,
@@ -273,15 +301,46 @@ class AwElcBackend:
             secondary_color=scale(settings.secondary_color),
             duration=settings.duration,
             tempo=settings.tempo,
+            additional_colors=tuple(scale(color) for color in settings.additional_colors),
         )
 
     def _save_animation(self, animation_id: int, settings: LightingSettings) -> None:
         color = settings.primary_color if settings.enabled else (0, 0, 0)
         if settings.enabled and settings.effect is LightingEffect.MORPH:
-            self._protocol.save_morph_animation(
+            if len(settings.colors) == 2:
+                self._protocol.save_morph_animation(
+                    animation_id,
+                    settings.colors[0],
+                    settings.colors[1],
+                    self._zones,
+                    settings.duration,
+                )
+            else:
+                self._protocol.save_multicolor_morph_animation(
+                    animation_id,
+                    settings.colors,
+                    self._zones,
+                    settings.duration,
+                )
+        elif settings.enabled and settings.effect is LightingEffect.BREATHING:
+            self._protocol.save_multicolor_morph_animation(
                 animation_id,
-                settings.primary_color,
-                settings.secondary_color,
+                (settings.primary_color, (0, 0, 0)),
+                self._zones,
+                settings.duration,
+            )
+        elif settings.enabled and settings.effect is LightingEffect.RAINBOW:
+            self._protocol.save_multicolor_morph_animation(
+                animation_id,
+                (
+                    (255, 0, 0),
+                    (255, 165, 0),
+                    (255, 255, 0),
+                    (0, 255, 0),
+                    (0, 255, 255),
+                    (0, 0, 255),
+                    (128, 0, 255),
+                ),
                 self._zones,
                 settings.duration,
             )

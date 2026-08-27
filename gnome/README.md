@@ -39,16 +39,19 @@ animation slots independently. Profile brightness offers two implementations:
   global dimness command. Sleep profiles still use hardware scaling because a
   user service cannot run while the machine is suspended.
 
-Verified effects on AW-ELC firmware 1.1.7 are static color, a two-color smooth
-morph, and the firmware's pulse effect. Pulse is presented as Flash: it uses
-one color, with duration controlling the action cycle and tempo controlling
-the flash rate. Morph accepts the same tempo field at the protocol level, but
+Verified primitive effects on AW-ELC firmware 1.1.7 are static color, Morph,
+and the firmware's Pulse effect. Pulse is presented as Flash: it uses one
+color, with duration controlling the action cycle and tempo controlling the
+flash rate. Morph accepts the same tempo field at the protocol level, but
 testing on firmware 1.1.7 found no visible effect; its UI exposes duration only.
+Breathing is composed from Morph targets for the selected color and black.
+Rainbow is composed from seven predefined Morph targets.
 The animation protocol and hardware were also verified with Morph sequences of
-up to 12 color targets across four action reports. The primary UI intentionally
-keeps the simpler two-color editor. Firmware Morph can introduce a dark phase
-between some otherwise bright color pairs (including red and yellow), so this
-is treated as controller behavior rather than software RGB interpolation.
+up to 12 color targets across four action reports. The Morph editor supports
+adding, removing, and reordering targets within that verified limit. Firmware
+Morph can introduce a dark phase between some otherwise bright color pairs
+(including red and yellow), so this is treated as controller behavior rather
+than software RGB interpolation.
 
 For an unpackaged development checkout, test exact brightness once with:
 

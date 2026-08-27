@@ -110,12 +110,18 @@ class MainWindow(Adw.ApplicationWindow):
             self.effects.append(LightingEffect.PULSE)
         if LightingEffect.MORPH in self.backend.capabilities.effects:
             self.effects.append(LightingEffect.MORPH)
+        if LightingEffect.BREATHING in self.backend.capabilities.effects:
+            self.effects.append(LightingEffect.BREATHING)
+        if LightingEffect.RAINBOW in self.backend.capabilities.effects:
+            self.effects.append(LightingEffect.RAINBOW)
         self.effect = Gtk.DropDown.new_from_strings(
             [
                 {
                     LightingEffect.STATIC: "Static",
                     LightingEffect.PULSE: "Flash (firmware Pulse)",
                     LightingEffect.MORPH: "Morph",
+                    LightingEffect.BREATHING: "Breathing",
+                    LightingEffect.RAINBOW: "Rainbow",
                 }[effect]
                 for effect in self.effects
             ]
@@ -126,7 +132,7 @@ class MainWindow(Adw.ApplicationWindow):
             selected_effect = 0
         self.effect.set_selected(selected_effect)
         effect_row = Adw.ActionRow(
-            title="Effect", subtitle="Static, flashing pulse, or smooth morph"
+            title="Effect", subtitle="Static or firmware animation recipe"
         )
         effect_row.add_suffix(self.effect)
         effect_row.set_activatable_widget(self.effect)
@@ -143,26 +149,31 @@ class MainWindow(Adw.ApplicationWindow):
         )
         self.color.set_rgba(rgba)
         color_row = Adw.ActionRow(title="Color", subtitle="Static keyboard color")
+        self.color_row = color_row
         color_row.add_suffix(self.color)
         color_row.set_activatable_widget(self.color)
         lighting_group.add(color_row)
 
-        self.secondary_color = Gtk.ColorDialogButton(
-            dialog=Gtk.ColorDialog(title="Second keyboard color")
+        self.morph_colors = Adw.ExpanderRow(
+            title="Morph colors",
+            subtitle="Additional transition targets",
         )
-        secondary = self.backend.settings.secondary_color or (0, 0, 255)
-        secondary_rgba = Gdk.RGBA()
-        secondary_rgba.red, secondary_rgba.green, secondary_rgba.blue = (
-            channel / 255 for channel in secondary
+        self.additional_color_rows = []
+        self.additional_color_buttons = []
+        self.add_color_button = Gtk.Button(label="Add Color")
+        self.add_color_button.set_valign(Gtk.Align.CENTER)
+        self.add_color_button.connect("clicked", self._add_color_clicked)
+        self.add_color_row = Adw.ActionRow(
+            title="Add another color",
+            subtitle="Up to 12 transition targets",
         )
-        secondary_rgba.alpha = 1.0
-        self.secondary_color.set_rgba(secondary_rgba)
-        self.secondary_color_row = Adw.ActionRow(
-            title="Second color", subtitle="Alternate morph target"
-        )
-        self.secondary_color_row.add_suffix(self.secondary_color)
-        self.secondary_color_row.set_activatable_widget(self.secondary_color)
-        lighting_group.add(self.secondary_color_row)
+        self.add_color_row.add_suffix(self.add_color_button)
+        self.add_color_row.set_activatable_widget(self.add_color_button)
+        initial_colors = self.backend.settings.colors[1:] or ((0, 0, 255),)
+        for color in initial_colors:
+            self._add_morph_color(color)
+        self.morph_colors.add_row(self.add_color_row)
+        lighting_group.add(self.morph_colors)
 
         self.duration = Gtk.Scale.new_with_range(
             Gtk.Orientation.HORIZONTAL, 4, 4095, 1
@@ -282,26 +293,25 @@ class MainWindow(Adw.ApplicationWindow):
             round(channel * 255) for channel in (rgba.red, rgba.green, rgba.blue)
         )
         selected_effect = self.effects[self.effect.get_selected()]
-        secondary_rgba = self.secondary_color.get_rgba()
-        secondary_color = tuple(
-            round(channel * 255)
-            for channel in (
-                secondary_rgba.red,
-                secondary_rgba.green,
-                secondary_rgba.blue,
-            )
-        )
         settings = LightingSettings(
             enabled=self.enabled.get_active(),
             effect=selected_effect,
             primary_color=color,
             brightness=round(self.brightness.get_value()),
-            secondary_color=(
-                secondary_color if selected_effect is LightingEffect.MORPH else None
+            additional_colors=(
+                tuple(self._button_color(button) for button in self.additional_color_buttons)
+                if selected_effect is LightingEffect.MORPH
+                else ()
             ),
             duration=(
                 round(self.duration.get_value())
-                if selected_effect in {LightingEffect.PULSE, LightingEffect.MORPH}
+                if selected_effect
+                in {
+                    LightingEffect.PULSE,
+                    LightingEffect.MORPH,
+                    LightingEffect.BREATHING,
+                    LightingEffect.RAINBOW,
+                }
                 else None
             ),
             tempo=(
@@ -325,13 +335,95 @@ class MainWindow(Adw.ApplicationWindow):
         is_animated = self.effects[self.effect.get_selected()] in {
             LightingEffect.PULSE,
             LightingEffect.MORPH,
+            LightingEffect.BREATHING,
+            LightingEffect.RAINBOW,
         }
-        self.secondary_color_row.set_visible(is_morph)
+        self.morph_colors.set_visible(is_morph)
+        self.color_row.set_visible(
+            self.effects[self.effect.get_selected()] is not LightingEffect.RAINBOW
+        )
         self.duration_row.set_visible(is_animated)
         self.tempo_row.set_visible(
             self.effects[self.effect.get_selected()] is LightingEffect.PULSE
         )
         self.animation_timing.set_visible(is_animated)
+
+    def _add_color_clicked(self, _button):
+        if len(self.additional_color_buttons) >= 11:
+            return
+        self.morph_colors.remove(self.add_color_row)
+        self._add_morph_color((255, 255, 255))
+        self.morph_colors.add_row(self.add_color_row)
+
+    def _add_morph_color(self, color):
+        button = Gtk.ColorDialogButton(
+            dialog=Gtk.ColorDialog(title="Morph target color")
+        )
+        self._set_color(button, color)
+        row = Adw.ActionRow()
+        controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        up = Gtk.Button(icon_name="go-up-symbolic")
+        up.set_tooltip_text("Move color earlier")
+        down = Gtk.Button(icon_name="go-down-symbolic")
+        down.set_tooltip_text("Move color later")
+        remove = Gtk.Button(icon_name="user-trash-symbolic")
+        remove.set_tooltip_text("Remove color")
+        up.connect("clicked", lambda _button: self._move_morph_color(button, -1))
+        down.connect("clicked", lambda _button: self._move_morph_color(button, 1))
+        remove.connect("clicked", lambda _button: self._remove_morph_color(button))
+        controls.append(button)
+        controls.append(up)
+        controls.append(down)
+        controls.append(remove)
+        row.add_suffix(controls)
+        self.additional_color_rows.append(row)
+        self.additional_color_buttons.append(button)
+        self.morph_colors.add_row(row)
+        self._update_morph_color_rows()
+
+    def _remove_morph_color(self, button):
+        if len(self.additional_color_buttons) <= 1:
+            return
+        index = self.additional_color_buttons.index(button)
+        self.morph_colors.remove(self.additional_color_rows[index])
+        self.additional_color_rows.pop(index)
+        self.additional_color_buttons.pop(index)
+        self._update_morph_color_rows()
+
+    def _move_morph_color(self, button, offset):
+        buttons = [self.color, *self.additional_color_buttons]
+        index = buttons.index(button)
+        target = index + offset
+        if not 0 <= target < len(buttons):
+            return
+        first = self._button_color(buttons[index])
+        second = self._button_color(buttons[target])
+        self._set_color(buttons[index], second)
+        self._set_color(buttons[target], first)
+
+    def _set_morph_colors(self, colors):
+        self.morph_colors.remove(self.add_color_row)
+        for row in self.additional_color_rows:
+            self.morph_colors.remove(row)
+        self.additional_color_rows.clear()
+        self.additional_color_buttons.clear()
+        for color in colors:
+            self._add_morph_color(color)
+        self.morph_colors.add_row(self.add_color_row)
+
+    def _update_morph_color_rows(self):
+        total = len(self.additional_color_rows) + 1
+        for index, row in enumerate(self.additional_color_rows, start=2):
+            row.set_title(f"Color {index}")
+        self.morph_colors.set_subtitle(f"{total} transition colors")
+        self.add_color_button.set_sensitive(total < 12)
+
+    @staticmethod
+    def _button_color(button):
+        rgba = button.get_rgba()
+        return tuple(
+            round(channel * 255) for channel in (rgba.red, rgba.green, rgba.blue)
+        )
 
     def _brightness_method_changed(self, *_args):
         self._refresh_service_status()
@@ -379,9 +471,7 @@ class MainWindow(Adw.ApplicationWindow):
             else 0
         )
         self._set_color(self.color, settings.primary_color)
-        self._set_color(
-            self.secondary_color, settings.secondary_color or (0, 0, 255)
-        )
+        self._set_morph_colors(settings.colors[1:] or ((0, 0, 255),))
         self.brightness.set_value(settings.brightness)
         self.duration.set_value(settings.duration or 500)
         self.tempo.set_value(settings.tempo or 100)

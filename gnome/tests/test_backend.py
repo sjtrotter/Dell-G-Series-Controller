@@ -43,6 +43,13 @@ class FakeProtocol:
             )
         )
 
+    def save_multicolor_morph_animation(
+        self, animation_id, colors, zones, duration
+    ):
+        self.calls.append(
+            ("save-multicolor-morph", animation_id, colors, zones, duration)
+        )
+
     def save_pulse_animation(self, animation_id, color, zones, duration, tempo):
         self.calls.append(
             ("save-pulse", animation_id, color, zones, duration, tempo)
@@ -69,12 +76,23 @@ class LightingSettingsTest(unittest.TestCase):
             )
 
     def test_morph_requires_secondary_color_and_duration(self):
-        with self.assertRaisesRegex(ValueError, "secondary color"):
+        with self.assertRaisesRegex(ValueError, "at least two colors"):
             LightingSettings(
                 enabled=True,
                 effect=LightingEffect.MORPH,
                 primary_color=(255, 0, 0),
                 brightness=100,
+            )
+
+    def test_rejects_more_than_twelve_colors(self):
+        with self.assertRaisesRegex(ValueError, "at most 12"):
+            LightingSettings(
+                enabled=True,
+                effect=LightingEffect.MORPH,
+                primary_color=(255, 0, 0),
+                brightness=100,
+                duration=500,
+                additional_colors=((0, 0, 255),) * 12,
             )
 
 
@@ -99,7 +117,13 @@ class AwElcBackendTest(unittest.TestCase):
         self.assertEqual(backend.info.zones, 1)
         self.assertEqual(
             backend.capabilities.effects,
-            {LightingEffect.STATIC, LightingEffect.PULSE, LightingEffect.MORPH},
+            {
+                LightingEffect.STATIC,
+                LightingEffect.PULSE,
+                LightingEffect.MORPH,
+                LightingEffect.BREATHING,
+                LightingEffect.RAINBOW,
+            },
         )
         self.assertTrue(backend.capabilities.persistent_power_states)
 
@@ -189,6 +213,65 @@ class AwElcBackendTest(unittest.TestCase):
             ],
         )
         self.assertEqual(protocol.calls[3], ("dimness", 10, (0,)))
+
+    def test_applies_multicolor_morph(self):
+        protocol = FakeProtocol()
+        backend = AwElcBackend(protocol)
+        settings = LightingSettings(
+            enabled=True,
+            effect=LightingEffect.MORPH,
+            primary_color=(255, 0, 0),
+            additional_colors=((0, 255, 0), (0, 0, 255)),
+            duration=500,
+            brightness=100,
+        )
+        backend.apply_power_state(PowerState.AC_CHARGED, settings)
+        self.assertEqual(
+            protocol.calls[0],
+            (
+                "save-multicolor-morph",
+                0x5C,
+                ((255, 0, 0), (0, 255, 0), (0, 0, 255)),
+                (0,),
+                500,
+            ),
+        )
+
+    def test_composes_breathing_from_color_and_black(self):
+        protocol = FakeProtocol()
+        backend = AwElcBackend(protocol)
+        settings = LightingSettings(
+            True,
+            LightingEffect.BREATHING,
+            (20, 40, 60),
+            100,
+            duration=500,
+        )
+        backend.apply_power_state(PowerState.AC_CHARGED, settings)
+        self.assertEqual(
+            protocol.calls[0],
+            (
+                "save-multicolor-morph",
+                0x5C,
+                ((20, 40, 60), (0, 0, 0)),
+                (0,),
+                500,
+            ),
+        )
+
+    def test_composes_rainbow_from_seven_morph_targets(self):
+        protocol = FakeProtocol()
+        backend = AwElcBackend(protocol)
+        settings = LightingSettings(
+            True,
+            LightingEffect.RAINBOW,
+            (255, 0, 0),
+            100,
+            duration=500,
+        )
+        backend.apply_power_state(PowerState.AC_CHARGED, settings)
+        self.assertEqual(protocol.calls[0][0], "save-multicolor-morph")
+        self.assertEqual(len(protocol.calls[0][2]), 7)
 
     def test_applies_only_selected_power_state(self):
         protocol = FakeProtocol()

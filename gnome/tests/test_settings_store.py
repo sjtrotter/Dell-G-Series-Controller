@@ -39,6 +39,20 @@ class LightingSettingsStoreTest(unittest.TestCase):
             store.save(settings)
             self.assertEqual(store.load(), settings)
 
+    def test_round_trips_multicolor_morph_settings(self):
+        settings = LightingSettings(
+            enabled=True,
+            effect=LightingEffect.MORPH,
+            primary_color=(255, 0, 0),
+            additional_colors=((0, 255, 0), (0, 0, 255)),
+            duration=750,
+            brightness=80,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            store = LightingSettingsStore(Path(directory) / "settings.json")
+            store.save(settings)
+            self.assertEqual(store.load(), settings)
+
     def test_round_trips_pulse_settings(self):
         settings = LightingSettings(
             enabled=True,
