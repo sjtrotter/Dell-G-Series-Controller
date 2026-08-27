@@ -69,6 +69,26 @@ class BrightnessServiceTest(unittest.TestCase):
             self.assertIsNone(service.update())
             self.assertEqual(protocol.dimness_calls, [(60, (0,))])
 
+    def test_rediscovers_the_protocol_after_disconnect(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            power_supply(root, "AC", type="Mains", online="1")
+            power_supply(root, "BAT0", type="Battery", status="Full", capacity="100")
+            store = LightingSettingsStore(root / "settings.json")
+            store.save_profiles(store.load_profiles(), BrightnessMode.EXACT_SERVICE)
+            protocols = [FakeProtocol(), FakeProtocol()]
+            service = BrightnessService(
+                store,
+                root,
+                protocol_factory=lambda: protocols.pop(0),
+            )
+
+            self.assertEqual(service.update(), (PowerState.AC_CHARGED, 100))
+            first = service.protocol
+            service.disconnect()
+            self.assertEqual(service.update(), (PowerState.AC_CHARGED, 100))
+            self.assertIsNot(service.protocol, first)
+
 
 if __name__ == "__main__":
     unittest.main()

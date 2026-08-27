@@ -95,3 +95,9 @@ sudo udevadm trigger --subsystem-match=usb --attr-match=idVendor=187c
 
 The rule uses systemd-logind's `uaccess` tag, granting access only to the
 active local session rather than making the controller globally writable.
+
+The service rediscovers the hidraw device after temporary access failures,
+USB re-enumeration, and suspend/resume. Brightness persistence is currently
+treated as a platform capability: global dimness is known to be volatile on
+firmware 1.1.7/platform `0x0e09`, but must be verified independently on other
+AW-ELC firmware and platform combinations.
