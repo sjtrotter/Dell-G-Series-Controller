@@ -9,6 +9,7 @@ runtime_dir = join_paths(get_option('libexecdir'), 'dell-g-series-controller')
 
 install_data(
   'main.py',
+  'inspect_platform.py',
   'service.py',
   install_dir: runtime_dir,
   install_mode: 'rwxr-xr-x',

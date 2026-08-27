@@ -40,6 +40,17 @@ python3 gnome/main.py --hardware
 Hardware mode does not invoke `sudo`, reset the USB device, or detach its
 kernel driver. The USB device must be accessible to the current user; a
 narrowly scoped udev rule will be provided with the packaged application.
+
+Inspect kernel-provided fan, temperature, and platform-profile support without
+making hardware changes:
+
+```sh
+python3 gnome/inspect_platform.py
+```
+
+On supported systems these controls come from the standard `alienware_wmi`,
+`dell_wmi_ddv`, and `dell_smm_hwmon` drivers. New code must use those kernel
+interfaces instead of invoking the legacy application's raw ACPI methods.
 The Profile selector edits the controller's AC, battery, sleep, and low-battery
 animation slots independently. Turning off **Customize by power state** hides
 those selectors and writes the same settings into the four awake firmware
