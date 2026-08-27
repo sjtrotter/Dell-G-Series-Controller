@@ -33,7 +33,7 @@ class MainWindow(Adw.ApplicationWindow):
         super().__init__(application=application)
         self.backend = backend
         self.settings_store = settings_store
-        self.set_title("Dell G Series Controller")
+        self.set_title("Dell G-Series Laptop Keyboard Controller")
         self.set_default_size(620, 700)
 
         self.toast_overlay = Adw.ToastOverlay()

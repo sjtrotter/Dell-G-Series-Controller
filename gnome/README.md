@@ -1,8 +1,8 @@
-# GNOME frontend
+# Dell G-Series Laptop Keyboard Controller
 
-This directory contains an experimental GTK 4/libadwaita frontend. It is kept
-separate from the legacy Qt application while the hardware backend and
-packaging are stabilized.
+This directory contains an experimental GTK 4/libadwaita frontend for the
+Dell G-Series Laptop Keyboard Controller. It is kept separate from the legacy
+Qt application while the hardware backend and packaging are stabilized.
 
 Run the interface without accessing hardware:
 

@@ -1,5 +1,5 @@
 [Unit]
-Description=Dell G Series keyboard profile brightness (development checkout)
+Description=Dell G-Series Laptop Keyboard Controller (development checkout)
 After=graphical-session.target
 
 [Service]
