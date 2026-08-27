@@ -174,6 +174,22 @@ class AwElcProtocol:
         )
         self.save_animation(animation_id, actions, zones)
 
+    def save_multicolor_morph_animation(
+        self,
+        animation_id: int,
+        colors: tuple[tuple[int, int, int], ...],
+        zones: tuple[int, ...],
+        duration: int,
+        tempo: int = 1,
+    ) -> None:
+        """Replace one slot with a looping sequence of morph targets."""
+        if len(colors) < 2:
+            raise ValueError("a morph animation requires at least two colors")
+        actions = tuple(
+            AnimationAction(2, duration, tempo, color) for color in colors
+        )
+        self.save_animation(animation_id, actions, zones)
+
     def save_pulse_animation(
         self,
         animation_id: int,

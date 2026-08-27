@@ -44,6 +44,11 @@ morph, and the firmware's pulse effect. Pulse is presented as Flash: it uses
 one color, with duration controlling the action cycle and tempo controlling
 the flash rate. Morph accepts the same tempo field at the protocol level, but
 testing on firmware 1.1.7 found no visible effect; its UI exposes duration only.
+The animation protocol and hardware were also verified with Morph sequences of
+up to 12 color targets across four action reports. The primary UI intentionally
+keeps the simpler two-color editor. Firmware Morph can introduce a dark phase
+between some otherwise bright color pairs (including red and yellow), so this
+is treated as controller behavior rather than software RGB interpolation.
 
 For an unpackaged development checkout, test exact brightness once with:
 

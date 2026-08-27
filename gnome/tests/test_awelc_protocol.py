@@ -116,6 +116,29 @@ class ProtocolTest(unittest.TestCase):
             ),
         )
 
+    def test_batches_multicolor_morph_actions_three_per_report(self):
+        commands = (0x22, 0x22, 0x23, 0x24, 0x24, 0x22, 0x22)
+        replies = tuple(bytes((3, command)).ljust(33, b"\0") for command in commands)
+        transport = FakeTransport(replies)
+        protocol = AwElcProtocol(transport)
+        colors = ((255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 0, 255))
+
+        protocol.save_multicolor_morph_animation(0x5C, colors, (0,), 600)
+
+        action_reports = [report for report in transport.reports if report[1] == 0x24]
+        self.assertEqual(len(action_reports), 2)
+        self.assertEqual(
+            action_reports[0][2:26],
+            b"".join(
+                AnimationAction(2, 600, 1, color).encode()
+                for color in colors[:3]
+            ),
+        )
+        self.assertEqual(
+            action_reports[1][2:10],
+            AnimationAction(2, 600, 1, colors[3]).encode(),
+        )
+
     def test_builds_single_color_pulse_action(self):
         commands = (0x22, 0x22, 0x23, 0x24, 0x22, 0x22)
         replies = tuple(bytes((3, command)).ljust(33, b"\0") for command in commands)
