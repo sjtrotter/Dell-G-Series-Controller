@@ -47,9 +47,7 @@ class Application(Adw.Application):
             self.brightness_mode = BrightnessMode.HARDWARE_SCALING
             self.separate_power_profiles = True
         else:
-            self.profiles = {
-                state: LightingSettings() for state in PowerState
-            }
+            self.profiles = {}
             self.brightness_mode = BrightnessMode.HARDWARE_SCALING
             self.separate_power_profiles = True
         self.connect("activate", self.on_activate)
