@@ -11,7 +11,10 @@ from .service_status import service_is_running
 
 class Application(Adw.Application):
     def __init__(self, backend, settings_store=None):
-        super().__init__(application_id="io.github.cemkaya_mpi.DellGSeriesController")
+        application_id = "io.github.cemkaya_mpi.DellGSeriesController"
+        if settings_store is None:
+            application_id += ".Demo"
+        super().__init__(application_id=application_id)
         self.backend = backend
         self.settings_store = settings_store
         if settings_store is not None:
@@ -34,8 +37,10 @@ class MainWindow(Adw.ApplicationWindow):
         super().__init__(application=application)
         self.backend = backend
         self.settings_store = settings_store
+        self.profiles = application.profiles
+        self.brightness_mode = application.brightness_mode
         self.set_title("Dell G-Series Laptop Keyboard Controller")
-        self.set_default_size(620, 700)
+        self.set_default_size(620, 640)
 
         self.toast_overlay = Adw.ToastOverlay()
         toolbar_view = Adw.ToolbarView()
@@ -47,18 +52,29 @@ class MainWindow(Adw.ApplicationWindow):
     def _build_page(self):
         page = Adw.PreferencesPage()
 
-        device_group = Adw.PreferencesGroup(title="Device")
-        device_group.set_description("Connected lighting controller")
-        info = self.backend.info
-        device_group.add(self._value_row("Model", info.name))
-        device_group.add(self._value_row("Controller", info.controller))
-        device_group.add(
-            self._value_row(
-                "Firmware",
-                f"{info.firmware}  ·  Platform {info.platform}  ·  {info.zones} zone",
-            )
+        profile_group = Adw.PreferencesGroup(title="Power profile")
+        profile_group.set_description(
+            "Choose how the keyboard behaves in each power state."
         )
-        page.add(device_group)
+        profile_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        self.power_source = self._toggle_group(
+            (("ac", "AC Power"), ("battery", "Battery"))
+        )
+        self.ac_state = self._toggle_group(
+            (("charged", "Charged"), ("charging", "Charging"), ("sleep", "Sleep"))
+        )
+        self.battery_state = self._toggle_group(
+            (("normal", "Normal"), ("low", "Low"), ("sleep", "Sleep"))
+        )
+        self.power_source.set_active_name("ac")
+        self.ac_state.set_active_name("charged")
+        self.battery_state.set_active_name("normal")
+        self.battery_state.set_visible(False)
+        profile_box.append(self.power_source)
+        profile_box.append(self.ac_state)
+        profile_box.append(self.battery_state)
+        profile_group.add(profile_box)
+        page.add(profile_group)
 
         lighting_group = Adw.PreferencesGroup(title="Keyboard lighting")
         if self.backend.capabilities.persistent_power_states:
@@ -71,18 +87,6 @@ class MainWindow(Adw.ApplicationWindow):
                 "Static changes are sent directly to the connected controller."
             )
 
-        self.power_states = list(PowerState)
-        self.power_state = Gtk.DropDown.new_from_strings(
-            [state.label for state in self.power_states]
-        )
-        self.power_state.set_selected(self.power_states.index(PowerState.AC_CHARGED))
-        power_state_row = Adw.ActionRow(
-            title="Profile", subtitle="AC, battery, sleep, or low-battery behavior"
-        )
-        power_state_row.add_suffix(self.power_state)
-        power_state_row.set_activatable_widget(self.power_state)
-        lighting_group.add(power_state_row)
-
         self.brightness_modes = [
             BrightnessMode.HARDWARE_SCALING,
             BrightnessMode.EXACT_SERVICE,
@@ -93,19 +97,9 @@ class MainWindow(Adw.ApplicationWindow):
         self.brightness_method.set_selected(
             self.brightness_modes.index(self.brightness_mode)
         )
-        self.brightness_method_row = Adw.ActionRow(
-            title="Profile brightness",
-        )
+        self.brightness_method_row = Adw.ActionRow(title="Method")
         self.brightness_method_row.add_suffix(self.brightness_method)
         self.brightness_method_row.set_activatable_widget(self.brightness_method)
-        lighting_group.add(self.brightness_method_row)
-        self.brightness_method.connect(
-            "notify::selected", self._brightness_method_changed
-        )
-        self._refresh_service_status()
-        self._service_status_timer = GLib.timeout_add_seconds(
-            2, self._refresh_service_status
-        )
 
         self.enabled = Adw.SwitchRow(title="Lighting enabled")
         self.enabled.set_active(self.backend.settings.enabled)
@@ -131,7 +125,6 @@ class MainWindow(Adw.ApplicationWindow):
         except ValueError:
             selected_effect = 0
         self.effect.set_selected(selected_effect)
-        self.effect.connect("notify::selected", self._effect_changed)
         effect_row = Adw.ActionRow(
             title="Effect", subtitle="Static, flashing pulse, or smooth morph"
         )
@@ -183,7 +176,6 @@ class MainWindow(Adw.ApplicationWindow):
             title="Effect duration", subtitle="Firmware animation timing"
         )
         self.duration_row.add_suffix(self.duration)
-        lighting_group.add(self.duration_row)
 
         self.tempo = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 1, 255, 1)
         self.tempo.set_value(self.backend.settings.tempo or 100)
@@ -195,9 +187,6 @@ class MainWindow(Adw.ApplicationWindow):
             title="Flash tempo", subtitle="Pulse flash rate"
         )
         self.tempo_row.add_suffix(self.tempo)
-        lighting_group.add(self.tempo_row)
-        self._effect_changed()
-        self.power_state.connect("notify::selected", self._power_state_changed)
 
         self.brightness = Gtk.Scale.new_with_range(
             Gtk.Orientation.HORIZONTAL, 0, 100, 1
@@ -226,18 +215,56 @@ class MainWindow(Adw.ApplicationWindow):
         lighting_group.add(apply_row)
         page.add(lighting_group)
 
-        system_group = Adw.PreferencesGroup(title="Performance and fans")
-        system_group.set_description(
-            "Unavailable in demo mode. Privileged controls will use a scoped helper."
+        advanced_group = Adw.PreferencesGroup(title="Additional options")
+        self.animation_timing = Adw.ExpanderRow(
+            title="Animation timing",
+            subtitle="Duration and flash rate",
         )
-        unavailable = Adw.ActionRow(
-            title="System controls",
-            subtitle="No privileged helper is connected",
+        self.animation_timing.add_row(self.duration_row)
+        self.animation_timing.add_row(self.tempo_row)
+        advanced_group.add(self.animation_timing)
+
+        self.brightness_behavior = Adw.ExpanderRow(
+            title="Brightness behavior",
         )
-        unavailable.set_sensitive(False)
-        system_group.add(unavailable)
-        page.add(system_group)
+        self.brightness_behavior.add_row(self.brightness_method_row)
+        advanced_group.add(self.brightness_behavior)
+        page.add(advanced_group)
+
+        device_group = Adw.PreferencesGroup(title="Device")
+        info = self.backend.info
+        device_details = Adw.ExpanderRow(
+            title=info.name,
+            subtitle="Controller and firmware details",
+        )
+        device_details.add_row(self._value_row("Controller", info.controller))
+        device_details.add_row(self._value_row("Firmware", info.firmware))
+        device_details.add_row(self._value_row("Platform", info.platform))
+        device_details.add_row(self._value_row("Lighting zones", str(info.zones)))
+        device_group.add(device_details)
+        page.add(device_group)
+
+        self.effect.connect("notify::selected", self._effect_changed)
+        self.brightness_method.connect(
+            "notify::selected", self._brightness_method_changed
+        )
+        self.power_source.connect("notify::active-name", self._power_source_changed)
+        self.ac_state.connect("notify::active-name", self._power_state_changed)
+        self.battery_state.connect("notify::active-name", self._power_state_changed)
+        self._effect_changed()
+        self._refresh_service_status()
+        self._service_status_timer = GLib.timeout_add_seconds(
+            2, self._refresh_service_status
+        )
         return page
+
+    @staticmethod
+    def _toggle_group(items):
+        group = Adw.ToggleGroup()
+        group.set_hexpand(True)
+        for name, label in items:
+            group.add(Adw.Toggle(name=name, label=label))
+        return group
 
     @staticmethod
     def _value_row(title, value):
@@ -283,7 +310,7 @@ class MainWindow(Adw.ApplicationWindow):
                 else None
             ),
         )
-        power_state = self.power_states[self.power_state.get_selected()]
+        power_state = self._selected_power_state()
         brightness_mode = self.brightness_modes[
             self.brightness_method.get_selected()
         ]
@@ -304,6 +331,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.tempo_row.set_visible(
             self.effects[self.effect.get_selected()] is LightingEffect.PULSE
         )
+        self.animation_timing.set_visible(is_animated)
 
     def _brightness_method_changed(self, *_args):
         self._refresh_service_status()
@@ -319,11 +347,30 @@ class MainWindow(Adw.ApplicationWindow):
             subtitle = "Exact brightness service is running"
         else:
             subtitle = "Exact brightness service is not running"
-        self.brightness_method_row.set_subtitle(subtitle)
+        self.brightness_behavior.set_subtitle(subtitle)
         return GLib.SOURCE_CONTINUE
 
+    def _power_source_changed(self, *_args):
+        on_ac = self.power_source.get_active_name() == "ac"
+        self.ac_state.set_visible(on_ac)
+        self.battery_state.set_visible(not on_ac)
+        self._power_state_changed()
+
+    def _selected_power_state(self):
+        if self.power_source.get_active_name() == "ac":
+            return {
+                "charged": PowerState.AC_CHARGED,
+                "charging": PowerState.AC_CHARGING,
+                "sleep": PowerState.AC_SLEEP,
+            }[self.ac_state.get_active_name()]
+        return {
+            "normal": PowerState.BATTERY_ON,
+            "low": PowerState.BATTERY_LOW,
+            "sleep": PowerState.BATTERY_SLEEP,
+        }[self.battery_state.get_active_name()]
+
     def _power_state_changed(self, *_args):
-        state = self.power_states[self.power_state.get_selected()]
+        state = self._selected_power_state()
         settings = self.profiles[state]
         self.enabled.set_active(settings.enabled)
         self.effect.set_selected(

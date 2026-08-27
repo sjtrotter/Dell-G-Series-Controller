@@ -4,15 +4,14 @@ This directory contains an experimental GTK 4/libadwaita frontend for the
 Dell G-Series Laptop Keyboard Controller. It is kept separate from the legacy
 Qt application while the hardware backend and packaging are stabilized.
 
-## Interface direction
+## Interface design
 
-The next visual redesign should take GNOME Settings' Power panel as its main
-reference: treat AC and battery behavior as power policies rather than exposing
-the controller's six firmware slots in a single drop-down. Use an AC/Battery
-view switcher with a smaller state switcher for each power source. Keep the
-common lighting controls visible, place animation timing and brightness-backend
-choices in native libadwaita expander rows, move hardware details to a
-diagnostics/about surface, and omit unavailable performance or fan controls.
+The interface takes GNOME Settings' Power panel as its main reference. AC and
+battery behavior are presented as power policies instead of exposing the
+controller's six firmware slots in a drop-down. Common lighting controls remain
+visible, while animation timing, brightness-backend choices, and hardware
+details use native libadwaita expander rows. Unavailable performance and fan
+controls are omitted.
 
 Run the interface without accessing hardware:
 
