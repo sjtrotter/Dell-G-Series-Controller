@@ -1,6 +1,7 @@
 import math
 import threading
 import time
+from dataclasses import replace
 
 import gi
 
@@ -392,9 +393,9 @@ class MainWindow(Adw.ApplicationWindow):
     def _build_page(self):
         page = Adw.PreferencesPage()
 
-        profile_group = Adw.PreferencesGroup(title="Power profile")
+        profile_group = Adw.PreferencesGroup(title="Global settings")
         profile_group.set_description(
-            "Choose how the keyboard behaves in each power state."
+            "Shared brightness and behavior for firmware power states."
         )
         self.profile_mode = Adw.SwitchRow(
             title="Customize by power state",
@@ -421,8 +422,22 @@ class MainWindow(Adw.ApplicationWindow):
         profile_box.append(self.ac_state)
         profile_box.append(self.battery_state)
         profile_group.add(profile_box)
+        self.brightness = Gtk.Scale.new_with_range(
+            Gtk.Orientation.HORIZONTAL, 0, 100, 1
+        )
+        self.brightness.set_value(self.backend.settings.brightness)
+        self.brightness.set_size_request(220, -1)
+        self.brightness.set_hexpand(True)
+        self.brightness.set_draw_value(True)
+        self.brightness.set_value_pos(Gtk.PositionType.RIGHT)
+        brightness_row = Adw.ActionRow(
+            title="Brightness", subtitle="Shared by all lighting zones"
+        )
+        brightness_row.add_suffix(self.brightness)
+        profile_group.add(brightness_row)
         page.add(profile_group)
-        profile_group.set_visible(not self.zone_demo)
+        self.profile_mode.set_visible(not self.zone_demo)
+        profile_box.set_visible(not self.zone_demo)
 
         lighting_group = Adw.PreferencesGroup(title="Keyboard lighting")
         if self.backend.capabilities.persistent_power_states:
@@ -594,20 +609,6 @@ class MainWindow(Adw.ApplicationWindow):
         )
         self.tempo_row.add_suffix(self.tempo)
 
-        self.brightness = Gtk.Scale.new_with_range(
-            Gtk.Orientation.HORIZONTAL, 0, 100, 1
-        )
-        self.brightness.set_value(self.backend.settings.brightness)
-        self.brightness.set_size_request(220, -1)
-        self.brightness.set_hexpand(True)
-        self.brightness.set_draw_value(True)
-        self.brightness.set_value_pos(Gtk.PositionType.RIGHT)
-        brightness_row = Adw.ActionRow(
-            title="Brightness", subtitle="Global AW-ELC dimness"
-        )
-        brightness_row.add_suffix(self.brightness)
-        lighting_group.add(brightness_row)
-
         page.add(lighting_group)
 
         advanced_group = Adw.PreferencesGroup(title="Additional options")
@@ -648,7 +649,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.color.connect("notify::rgba", self._control_changed)
         self.duration.connect("value-changed", self._control_changed)
         self.tempo.connect("value-changed", self._control_changed)
-        self.brightness.connect("value-changed", self._control_changed)
+        self.brightness.connect("value-changed", self._brightness_changed)
         self.power_source.connect("notify::active-name", self._power_source_changed)
         self.ac_state.connect("notify::active-name", self._power_state_changed)
         self.battery_state.connect("notify::active-name", self._power_state_changed)
@@ -771,6 +772,15 @@ class MainWindow(Adw.ApplicationWindow):
         if not self._updating_controls:
             self._edit_generation += 1
             self._set_dirty(True)
+
+    def _brightness_changed(self, *_args):
+        if self.zone_demo and not self._updating_controls:
+            brightness = round(self.brightness.get_value())
+            self.zone_drafts = {
+                zone: replace(settings, brightness=brightness)
+                for zone, settings in self.zone_drafts.items()
+            }
+        self._control_changed()
 
     def _set_dirty(self, dirty):
         self.dirty = dirty
@@ -1178,11 +1188,13 @@ class MainWindow(Adw.ApplicationWindow):
             return
         self.zone_drafts[self.active_zone] = self._settings_from_controls()
         self.active_zone = zone
-        self._load_settings_controls(self.zone_drafts[self.active_zone])
+        self._load_settings_controls(
+            self.zone_drafts[self.active_zone], include_brightness=False
+        )
         self._edit_generation += 1
         self._set_dirty(True)
 
-    def _load_settings_controls(self, settings):
+    def _load_settings_controls(self, settings, include_brightness=True):
         was_updating = self._updating_controls
         self._updating_controls = True
         self.enabled.set_active(settings.enabled)
@@ -1193,7 +1205,8 @@ class MainWindow(Adw.ApplicationWindow):
         )
         self._set_color(self.color, settings.primary_color)
         self._set_morph_colors(settings.colors[1:])
-        self.brightness.set_value(settings.brightness)
+        if include_brightness:
+            self.brightness.set_value(settings.brightness)
         self.duration.set_value(settings.duration or 500)
         self.tempo.set_value(settings.tempo or 100)
         self._effect_changed()
