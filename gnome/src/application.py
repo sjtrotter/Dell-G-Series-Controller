@@ -152,16 +152,30 @@ class LightingKeyboard(Gtk.DrawingArea):
         (0.62, 0.32, 0.88),
     )
 
-    def __init__(self, preview_provider=None, layout=None, demonstrate_zones=False):
+    def __init__(
+        self,
+        preview_provider=None,
+        layout=None,
+        demonstrate_zones=False,
+        zone_selected_callback=None,
+        selected_zone_provider=None,
+    ):
         super().__init__()
         self.preview_provider = preview_provider
         self.layout = layout
         self.demonstrate_zones = demonstrate_zones
+        self.zone_selected_callback = zone_selected_callback
+        self.selected_zone_provider = selected_zone_provider
         self.set_content_width(184)
         self.set_content_height(72)
         self.set_size_request(184, 72)
         self.set_draw_func(self._draw)
         self.add_tick_callback(self._animate)
+        if zone_selected_callback is not None:
+            click = Gtk.GestureClick()
+            click.connect("released", self._clicked)
+            self.add_controller(click)
+            self.set_cursor_from_name("pointer")
 
     def _animate(self, _widget, _frame_clock):
         self.queue_draw()
@@ -183,6 +197,33 @@ class LightingKeyboard(Gtk.DrawingArea):
             elapsed_seconds=now,
         )
 
+    @classmethod
+    def _key_rectangles(cls):
+        key_index = 0
+        for row, columns in enumerate(cls.ROW_LENGTHS):
+            key_width = 14
+            row_width = columns * key_width + (columns - 1) * 3
+            start_x = (184 - row_width) / 2
+            y = 9 + row * 14
+            for column in range(columns):
+                yield key_index, start_x + column * 17, y, key_width, 9
+                key_index += 1
+
+    def _clicked(self, _gesture, _presses, x, y):
+        width = self.get_width()
+        height = self.get_height()
+        scale = min(width / 184, height / 72)
+        local_x = (x - (width - 184 * scale) / 2) / scale
+        local_y = (y - (height - 72 * scale) / 2) / scale
+        for key_index, key_x, key_y, key_width, key_height in self._key_rectangles():
+            inside_x = key_x <= local_x <= key_x + key_width
+            inside_y = key_y <= local_y <= key_y + key_height
+            if inside_x and inside_y:
+                for zone in self.layout.zones:
+                    if key_index in zone.key_indices:
+                        self.zone_selected_callback(zone.firmware_id)
+                        return
+
     def _draw(self, _area, context, width, height):
         now = time.monotonic()
         scale = min(width / 184, height / 72)
@@ -195,7 +236,6 @@ class LightingKeyboard(Gtk.DrawingArea):
         context.rectangle(1, 1, 182, 70)
         context.stroke()
 
-        key_index = 0
         preview = self._preview_color(now) if self.preview_provider else None
         preview_settings = self.preview_provider() if self.preview_provider else {}
         zone_settings = preview_settings.get("zone_settings", {})
@@ -206,33 +246,41 @@ class LightingKeyboard(Gtk.DrawingArea):
                 for zone in self.layout.zones
                 for key in zone.key_indices
             }
-        for row, columns in enumerate(self.ROW_LENGTHS):
-            key_width = 14
-            gap = 3
-            row_width = columns * key_width + (columns - 1) * gap
-            start_x = (184 - row_width) / 2
-            y = 9 + row * 14
-            for column in range(columns):
-                if preview:
-                    color, alpha = preview
-                    if key_index in zone_for_key:
-                        zone = zone_for_key[key_index]
-                        if zone in zone_settings:
-                            color, alpha = self._settings_preview_color(
-                                zone_settings[zone], now
-                            )
-                        else:
-                            color = self.ZONE_COLORS[zone % len(self.ZONE_COLORS)]
-                    context.set_source_rgba(*color, alpha)
-                else:
-                    phase = now * 2.4 - key_index * 0.32
-                    glow = max(0.0, math.sin(phase)) ** 2
-                    context.set_source_rgba(
-                        0.21, 0.52, 0.89, 0.16 + 0.78 * glow
-                    )
-                context.rectangle(start_x + column * 17, y, key_width, 9)
-                context.fill()
-                key_index += 1
+        selected_zone = (
+            self.selected_zone_provider()
+            if self.selected_zone_provider is not None
+            else None
+        )
+        for key_index, key_x, key_y, key_width, key_height in self._key_rectangles():
+            if preview:
+                color, alpha = preview
+                if key_index in zone_for_key:
+                    zone = zone_for_key[key_index]
+                    if zone in zone_settings:
+                        color, alpha = self._settings_preview_color(
+                            zone_settings[zone], now
+                        )
+                    else:
+                        color = self.ZONE_COLORS[zone % len(self.ZONE_COLORS)]
+                context.set_source_rgba(*color, alpha)
+            else:
+                phase = now * 2.4 - key_index * 0.32
+                glow = max(0.0, math.sin(phase)) ** 2
+                context.set_source_rgba(
+                    0.21, 0.52, 0.89, 0.16 + 0.78 * glow
+                )
+            context.rectangle(key_x, key_y, key_width, key_height)
+            context.fill()
+            if zone_for_key.get(key_index) == selected_zone:
+                context.set_line_width(1.5)
+                context.set_source_rgba(1, 1, 1, 0.95)
+                context.rectangle(
+                    key_x - 1,
+                    key_y - 1,
+                    key_width + 2,
+                    key_height + 2,
+                )
+                context.stroke()
         context.restore()
 
 
@@ -458,20 +506,14 @@ class MainWindow(Adw.ApplicationWindow):
             self.backend.zone_settings if self.zone_demo else {}
         )
         self.active_zone = 0
-        if self.zone_demo:
-            self.zone_selector = self._toggle_group(
-                tuple(
-                    (str(zone.firmware_id), zone.label)
-                    for zone in self.keyboard_layout.zones
-                )
-            )
-            self.zone_selector.set_active_name("0")
-            self.zone_selector.connect("notify::active-name", self._zone_changed)
-            color_panel.append(self.zone_selector)
         self.keyboard_preview = LightingKeyboard(
             self._preview_state,
             layout=self.keyboard_layout,
             demonstrate_zones=self.zone_demo,
+            zone_selected_callback=self._select_zone if self.zone_demo else None,
+            selected_zone_provider=(
+                lambda: self.active_zone if self.zone_demo else None
+            ),
         )
         self.keyboard_preview.set_content_width(368)
         self.keyboard_preview.set_content_height(112)
@@ -1120,11 +1162,11 @@ class MainWindow(Adw.ApplicationWindow):
             "sleep": PowerState.BATTERY_SLEEP,
         }[self.battery_state.get_active_name()]
 
-    def _zone_changed(self, *_args):
-        if self._updating_controls:
+    def _select_zone(self, zone):
+        if self._updating_controls or zone == self.active_zone:
             return
         self.zone_drafts[self.active_zone] = self._settings_from_controls()
-        self.active_zone = int(self.zone_selector.get_active_name())
+        self.active_zone = zone
         self._load_settings_controls(self.zone_drafts[self.active_zone])
         self._edit_generation += 1
         self._set_dirty(True)
