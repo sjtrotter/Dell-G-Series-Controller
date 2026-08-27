@@ -1,0 +1,3 @@
+# Permit the active local desktop session to control supported AW-ELC devices.
+SUBSYSTEM=="usb", ATTR{idVendor}=="187c", ATTR{idProduct}=="0550", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="187c", ATTR{idProduct}=="0551", TAG+="uaccess"
