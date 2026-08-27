@@ -159,7 +159,12 @@ class AwElcProtocol:
         duration: int,
         tempo: int = 1,
     ) -> None:
-        """Replace one slot with a looping two-color morph animation."""
+        """Replace one slot with a looping two-color morph animation.
+
+        Firmware 1.1.7 accepts the tempo field, but hardware testing found no
+        visible difference between tempo 1 and 100. Duration controls the
+        interpolation timing.
+        """
         actions = (
             AnimationAction(2, duration, tempo, primary_color),
             AnimationAction(2, duration, tempo, secondary_color),

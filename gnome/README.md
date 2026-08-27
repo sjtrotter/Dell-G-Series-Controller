@@ -26,7 +26,8 @@ unchanged.
 Verified effects on AW-ELC firmware 1.1.7 are static color, a two-color smooth
 morph, and the firmware's pulse effect. Pulse is presented as Flash: it uses
 one color, with duration controlling the action cycle and tempo controlling
-the flash rate.
+the flash rate. Morph accepts the same tempo field at the protocol level, but
+testing on firmware 1.1.7 found no visible effect; its UI exposes duration only.
 
 For development, install the included device-access rule and reload udev:
 
