@@ -74,17 +74,77 @@ class LightingSettingsStore:
         brightness_mode: BrightnessMode = BrightnessMode.HARDWARE_SCALING,
         separate_power_profiles: bool = True,
     ) -> None:
+        data = self._read_document()
+        saved_configurations = data.get("saved_configurations", {})
         self._write(
             {
-                "version": 3,
+                "version": 4,
                 "brightness_mode": brightness_mode.value,
                 "separate_power_profiles": separate_power_profiles,
                 "profiles": {
                     state.name: self._encode(settings)
                     for state, settings in profiles.items()
                 },
+                "saved_configurations": saved_configurations,
             }
         )
+
+    def list_saved_configurations(self) -> tuple[str, ...]:
+        saved = self._read_document().get("saved_configurations", {})
+        if not isinstance(saved, dict):
+            return ()
+        return tuple(sorted(saved, key=str.casefold))
+
+    def save_configuration(
+        self,
+        name: str,
+        profiles: dict[PowerState, LightingSettings],
+        brightness_mode: BrightnessMode,
+        separate_power_profiles: bool,
+    ) -> None:
+        name = name.strip()
+        if not name or len(name) > 64:
+            raise ValueError("configuration name must contain 1 to 64 characters")
+        data = self._read_document()
+        saved = data.setdefault("saved_configurations", {})
+        saved[name] = {
+            "brightness_mode": brightness_mode.value,
+            "separate_power_profiles": separate_power_profiles,
+            "profiles": {
+                state.name: self._encode(settings)
+                for state, settings in profiles.items()
+            },
+        }
+        self._write(data)
+
+    def load_configuration(
+        self, name: str
+    ) -> tuple[dict[PowerState, LightingSettings], BrightnessMode, bool]:
+        saved = self._read_document()["saved_configurations"][name]
+        defaults = self._default_profiles()
+        for state in PowerState:
+            encoded = saved["profiles"].get(state.name)
+            if encoded is not None:
+                defaults[state] = self._decode(encoded)
+        return (
+            defaults,
+            BrightnessMode(saved["brightness_mode"]),
+            bool(saved["separate_power_profiles"]),
+        )
+
+    def delete_configuration(self, name: str) -> None:
+        data = self._read_document()
+        saved = data.get("saved_configurations", {})
+        if name in saved:
+            del saved[name]
+            self._write(data)
+
+    def _read_document(self) -> dict:
+        try:
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            return {}
 
     def _write(self, data: dict) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)

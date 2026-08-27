@@ -128,6 +128,65 @@ class LightingSettingsStoreTest(unittest.TestCase):
             store.save(LightingSettings(True, LightingEffect.STATIC, (1, 2, 3), 100))
             self.assertTrue(store.load_separate_power_profiles())
 
+    def test_round_trips_named_configuration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = LightingSettingsStore(Path(directory) / "settings.json")
+            profiles = store.load_profiles()
+            profiles[PowerState.AC_CHARGED] = LightingSettings(
+                True, LightingEffect.STATIC, (12, 34, 56), 78
+            )
+            store.save_profiles(profiles)
+            store.save_configuration(
+                "Blue desk",
+                profiles,
+                BrightnessMode.EXACT_SERVICE,
+                False,
+            )
+
+            self.assertEqual(store.list_saved_configurations(), ("Blue desk",))
+            loaded, brightness_mode, separate = store.load_configuration("Blue desk")
+            self.assertEqual(
+                loaded[PowerState.AC_CHARGED].primary_color, (12, 34, 56)
+            )
+            self.assertEqual(brightness_mode, BrightnessMode.EXACT_SERVICE)
+            self.assertFalse(separate)
+
+    def test_saving_active_profiles_preserves_named_configurations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = LightingSettingsStore(Path(directory) / "settings.json")
+            profiles = store.load_profiles()
+            store.save_configuration(
+                "Keep me",
+                profiles,
+                BrightnessMode.HARDWARE_SCALING,
+                True,
+            )
+            store.save_profiles(profiles)
+            self.assertEqual(store.list_saved_configurations(), ("Keep me",))
+
+    def test_deletes_named_configuration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = LightingSettingsStore(Path(directory) / "settings.json")
+            store.save_configuration(
+                "Temporary",
+                store.load_profiles(),
+                BrightnessMode.HARDWARE_SCALING,
+                True,
+            )
+            store.delete_configuration("Temporary")
+            self.assertEqual(store.list_saved_configurations(), ())
+
+    def test_rejects_empty_configuration_name(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = LightingSettingsStore(Path(directory) / "settings.json")
+            with self.assertRaises(ValueError):
+                store.save_configuration(
+                    "   ",
+                    store.load_profiles(),
+                    BrightnessMode.HARDWARE_SCALING,
+                    True,
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

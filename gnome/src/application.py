@@ -204,8 +204,21 @@ class MainWindow(Adw.ApplicationWindow):
         toolbar_view = Adw.ToolbarView()
         toolbar_view.add_top_bar(Adw.HeaderBar())
         toolbar_view.set_content(self._build_page())
+        toolbar_view.add_bottom_bar(self._build_action_bar())
         self.toast_overlay.set_child(toolbar_view)
         self.set_content(self.toast_overlay)
+
+    def _build_action_bar(self):
+        action_bar = Gtk.ActionBar()
+        action_bar.add_css_class("view")
+        self.apply_button = Gtk.Button(label="Apply")
+        self.apply_button.add_css_class("suggested-action")
+        self.apply_button.set_tooltip_text(
+            "Save the current lighting settings to the keyboard"
+        )
+        self.apply_button.connect("clicked", self._apply)
+        action_bar.pack_end(self.apply_button)
+        return action_bar
 
     def _build_page(self):
         page = Adw.PreferencesPage()
@@ -240,6 +253,48 @@ class MainWindow(Adw.ApplicationWindow):
         profile_box.append(self.battery_state)
         profile_group.add(profile_box)
         page.add(profile_group)
+
+        if self.settings_store is not None:
+            saved_group = Adw.PreferencesGroup(title="Saved configurations")
+            saved_group.set_description(
+                "Save or restore the complete set of power-state profiles."
+            )
+            self.saved_configuration = Gtk.DropDown()
+            saved_row = Adw.ActionRow(title="Configuration")
+            saved_row.add_suffix(self.saved_configuration)
+            saved_row.set_activatable_widget(self.saved_configuration)
+            saved_group.add(saved_row)
+
+            saved_actions = Gtk.Box(
+                orientation=Gtk.Orientation.HORIZONTAL,
+                spacing=6,
+            )
+            saved_actions.set_halign(Gtk.Align.END)
+            self.load_configuration_button = Gtk.Button(label="Load")
+            self.load_configuration_button.connect(
+                "clicked", self._load_configuration
+            )
+            self.delete_configuration_button = Gtk.Button(
+                icon_name="user-trash-symbolic"
+            )
+            self.delete_configuration_button.set_tooltip_text(
+                "Delete selected configuration"
+            )
+            self.delete_configuration_button.connect(
+                "clicked", self._confirm_delete_configuration
+            )
+            save_configuration_button = Gtk.Button(label="Save As…")
+            save_configuration_button.connect(
+                "clicked", self._show_save_configuration_dialog
+            )
+            saved_actions.append(self.load_configuration_button)
+            saved_actions.append(self.delete_configuration_button)
+            saved_actions.append(save_configuration_button)
+            saved_actions_row = Adw.ActionRow()
+            saved_actions_row.add_suffix(saved_actions)
+            saved_group.add(saved_actions_row)
+            page.add(saved_group)
+            self._refresh_saved_configurations()
 
         lighting_group = Adw.PreferencesGroup(title="Keyboard lighting")
         if self.backend.capabilities.persistent_power_states:
@@ -378,17 +433,6 @@ class MainWindow(Adw.ApplicationWindow):
         brightness_row.add_suffix(self.brightness)
         lighting_group.add(brightness_row)
 
-        apply_row = Adw.ActionRow(
-            title="Apply lighting",
-            subtitle="Save the selected color and brightness to the controller",
-        )
-        apply_button = Gtk.Button(label="Apply")
-        apply_button.add_css_class("suggested-action")
-        apply_button.set_valign(Gtk.Align.CENTER)
-        apply_button.connect("clicked", self._apply)
-        apply_row.add_suffix(apply_button)
-        apply_row.set_activatable_widget(apply_button)
-        lighting_group.add(apply_row)
         page.add(lighting_group)
 
         advanced_group = Adw.PreferencesGroup(title="Additional options")
@@ -455,12 +499,37 @@ class MainWindow(Adw.ApplicationWindow):
         return row
 
     def _apply(self, _button):
+        settings = self._settings_from_controls()
+        power_state = self._selected_power_state()
+        brightness_mode = self.brightness_modes[
+            self.brightness_method.get_selected()
+        ]
+        separate_power_profiles = self.profile_mode.get_active()
+        if separate_power_profiles:
+            self.backend.apply_power_state(power_state, settings, brightness_mode)
+            self.profiles[power_state] = settings
+        else:
+            unified = unified_power_profiles(settings)
+            for state, profile_settings in unified.items():
+                self.backend.apply_power_state(
+                    state, profile_settings, brightness_mode
+                )
+                self.profiles[state] = profile_settings
+        if self.settings_store is not None:
+            self.settings_store.save_profiles(
+                self.profiles,
+                brightness_mode,
+                separate_power_profiles,
+            )
+        self.toast_overlay.add_toast(Adw.Toast(title="Lighting settings applied"))
+
+    def _settings_from_controls(self):
         rgba = self.color.get_rgba()
         color = tuple(
             round(channel * 255) for channel in (rgba.red, rgba.green, rgba.blue)
         )
         selected_effect = self.effects[self.effect.get_selected()]
-        settings = LightingSettings(
+        return LightingSettings(
             enabled=self.enabled.get_active(),
             effect=selected_effect,
             primary_color=color,
@@ -487,28 +556,122 @@ class MainWindow(Adw.ApplicationWindow):
                 else None
             ),
         )
-        power_state = self._selected_power_state()
-        brightness_mode = self.brightness_modes[
-            self.brightness_method.get_selected()
-        ]
-        separate_power_profiles = self.profile_mode.get_active()
-        if separate_power_profiles:
-            self.backend.apply_power_state(power_state, settings, brightness_mode)
-            self.profiles[power_state] = settings
+
+    def _profiles_with_current_edits(self):
+        profiles = dict(self.profiles)
+        settings = self._settings_from_controls()
+        if self.profile_mode.get_active():
+            profiles[self._selected_power_state()] = settings
         else:
-            unified = unified_power_profiles(settings)
-            for state, profile_settings in unified.items():
-                self.backend.apply_power_state(
-                    state, profile_settings, brightness_mode
-                )
-                self.profiles[state] = profile_settings
-        if self.settings_store is not None:
-            self.settings_store.save_profiles(
-                self.profiles,
-                brightness_mode,
-                separate_power_profiles,
+            profiles.update(unified_power_profiles(settings))
+        return profiles
+
+    def _refresh_saved_configurations(self, select_name=None):
+        self.saved_configuration_names = list(
+            self.settings_store.list_saved_configurations()
+        )
+        labels = self.saved_configuration_names or ["No saved configurations"]
+        self.saved_configuration.set_model(Gtk.StringList.new(labels))
+        if select_name in self.saved_configuration_names:
+            self.saved_configuration.set_selected(
+                self.saved_configuration_names.index(select_name)
             )
-        self.toast_overlay.add_toast(Adw.Toast(title="Lighting settings applied"))
+        available = bool(self.saved_configuration_names)
+        self.saved_configuration.set_sensitive(available)
+        self.load_configuration_button.set_sensitive(available)
+        self.delete_configuration_button.set_sensitive(available)
+
+    def _selected_configuration_name(self):
+        if not self.saved_configuration_names:
+            return None
+        selected = self.saved_configuration.get_selected()
+        if selected >= len(self.saved_configuration_names):
+            return None
+        return self.saved_configuration_names[selected]
+
+    def _show_save_configuration_dialog(self, _button):
+        dialog = Adw.AlertDialog(
+            heading="Save Configuration",
+            body="Name this complete set of keyboard profiles.",
+        )
+        entry = Gtk.Entry(placeholder_text="Configuration name")
+        entry.set_activates_default(True)
+        dialog.set_extra_child(entry)
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("save", "Save")
+        dialog.set_default_response("save")
+        dialog.set_close_response("cancel")
+        dialog.set_response_appearance("save", Adw.ResponseAppearance.SUGGESTED)
+        dialog.connect(
+            "response", self._save_configuration_response, entry
+        )
+        dialog.present(self)
+
+    def _save_configuration_response(self, _dialog, response, entry):
+        if response != "save":
+            return
+        name = entry.get_text().strip()
+        try:
+            self.settings_store.save_configuration(
+                name,
+                self._profiles_with_current_edits(),
+                self.brightness_modes[self.brightness_method.get_selected()],
+                self.profile_mode.get_active(),
+            )
+        except ValueError as error:
+            self.toast_overlay.add_toast(Adw.Toast(title=str(error)))
+            return
+        self._refresh_saved_configurations(name)
+        self.toast_overlay.add_toast(
+            Adw.Toast(title=f'Saved configuration “{name}”')
+        )
+
+    def _load_configuration(self, _button):
+        name = self._selected_configuration_name()
+        if name is None:
+            return
+        profiles, brightness_mode, separate = (
+            self.settings_store.load_configuration(name)
+        )
+        self.profiles = profiles
+        self.brightness_mode = brightness_mode
+        self.separate_power_profiles = separate
+        self.profile_mode.set_active(separate)
+        self.brightness_method.set_selected(
+            self.brightness_modes.index(brightness_mode)
+        )
+        self._power_state_changed()
+        self.toast_overlay.add_toast(
+            Adw.Toast(title=f'Loaded “{name}”; press Apply to use it')
+        )
+
+    def _confirm_delete_configuration(self, _button):
+        name = self._selected_configuration_name()
+        if name is None:
+            return
+        dialog = Adw.AlertDialog(
+            heading="Delete Configuration?",
+            body=f'“{name}” will be permanently removed.',
+        )
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("delete", "Delete")
+        dialog.set_close_response("cancel")
+        dialog.set_response_appearance(
+            "delete", Adw.ResponseAppearance.DESTRUCTIVE
+        )
+        dialog.connect(
+            "response", self._delete_configuration_response, name
+        )
+        dialog.present(self)
+
+    def _delete_configuration_response(self, _dialog, response, name):
+        if response != "delete":
+            return
+        self.settings_store.delete_configuration(name)
+        self._refresh_saved_configurations()
+        self.toast_overlay.add_toast(
+            Adw.Toast(title=f'Deleted configuration “{name}”')
+        )
 
     def _effect_changed(self, *_args):
         is_morph = self.effects[self.effect.get_selected()] is LightingEffect.MORPH
