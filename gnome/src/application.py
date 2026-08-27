@@ -37,15 +37,6 @@ class Application(Adw.Application):
             application_id += ".Demo"
         super().__init__(application_id=application_id)
         self.backend = backend
-        platform_id = None
-        if backend.info.platform.startswith("0x"):
-            try:
-                platform_id = int(backend.info.platform, 16)
-            except ValueError:
-                pass
-        self.keyboard_layout = layout_for_device(
-            platform_id, backend.capabilities.zone_count
-        )
         self.backend_factory = backend_factory
         self.settings_store = settings_store
         self.loading_only = loading_only
@@ -218,6 +209,15 @@ class MainWindow(Adw.ApplicationWindow):
     def __init__(self, application, backend, settings_store=None):
         super().__init__(application=application)
         self.backend = backend
+        platform_id = None
+        if backend.info.platform.startswith("0x"):
+            try:
+                platform_id = int(backend.info.platform, 16)
+            except ValueError:
+                pass
+        self.keyboard_layout = layout_for_device(
+            platform_id, backend.capabilities.zone_count
+        )
         self.settings_store = settings_store
         self.profiles = application.profiles
         self.brightness_mode = application.brightness_mode
