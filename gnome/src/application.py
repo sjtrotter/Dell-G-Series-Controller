@@ -1,6 +1,6 @@
+import math
 import threading
 import time
-from pathlib import Path
 
 import gi
 
@@ -126,25 +126,12 @@ class LoadingWindow(Adw.ApplicationWindow):
         status = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         status.set_halign(Gtk.Align.CENTER)
         status.set_valign(Gtk.Align.CENTER)
-        asset_dir = Path(__file__).parent.parent / "data"
-        alienware_logo = Gtk.Picture.new_for_filename(
-            str(asset_dir / "alienware.svg")
-        )
-        alienware_logo.set_size_request(142, 170)
-        alienware_logo.set_content_fit(Gtk.ContentFit.CONTAIN)
-        status.append(alienware_logo)
-        dell_logo_path = asset_dir / "dell.svg"
-        dell_logo = Gtk.Picture.new_for_filename(str(dell_logo_path))
-        dell_logo.set_size_request(64, 64)
-        dell_logo.set_content_fit(Gtk.ContentFit.CONTAIN)
-        status.append(dell_logo)
-        keyboard = Gtk.Image.new_from_icon_name("input-keyboard-symbolic")
-        keyboard.set_pixel_size(44)
-        status.append(keyboard)
-        title = Gtk.Label(label="Connecting to keyboard")
+        status.append(AlienMark())
+        title = Gtk.Label(label="Dell G-Series Keyboard")
         title.add_css_class("title-1")
         status.append(title)
-        description = Gtk.Label(label="Waiting for the Alienware AW-ELC controller")
+        status.append(LightingKeyboard())
+        description = Gtk.Label(label="Connecting to keyboard")
         description.add_css_class("dim-label")
         status.append(description)
         spinner = Adw.Spinner()
@@ -153,6 +140,95 @@ class LoadingWindow(Adw.ApplicationWindow):
         status.append(spinner)
         toolbar_view.set_content(status)
         self.set_content(toolbar_view)
+
+
+class AlienMark(Gtk.DrawingArea):
+    """Original tall alien motif for the connection screen."""
+
+    def __init__(self):
+        super().__init__()
+        self.set_content_width(126)
+        self.set_content_height(154)
+        self.set_size_request(126, 154)
+        self.set_draw_func(self._draw)
+
+    @staticmethod
+    def _draw(_area, context, width, height):
+        context.save()
+        context.translate(width / 2, height / 2)
+        context.scale(width / 104, height / 120)
+
+        context.set_source_rgba(1, 1, 1, 0.96)
+        context.move_to(0, -55)
+        context.curve_to(-29, -53, -43, -25, -36, 10)
+        context.curve_to(-31, 36, -13, 54, 0, 57)
+        context.curve_to(13, 54, 31, 36, 36, 10)
+        context.curve_to(43, -25, 29, -53, 0, -55)
+        context.close_path()
+        context.fill()
+
+        context.set_source_rgba(0.08, 0.09, 0.11, 1)
+        for x in (-17, 17):
+            context.save()
+            context.translate(x, 5)
+            context.rotate(-0.2 if x < 0 else 0.2)
+            context.scale(1.0, 1.75)
+            context.arc(0, 0, 6.5, 0, math.tau)
+            context.fill()
+            context.restore()
+        context.restore()
+
+
+class LightingKeyboard(Gtk.DrawingArea):
+    """Decorative keyboard with a subtle traveling backlight animation."""
+
+    ROW_LENGTHS = (10, 10, 9, 7)
+
+    def __init__(self):
+        super().__init__()
+        self.set_content_width(184)
+        self.set_content_height(72)
+        self.set_size_request(184, 72)
+        self.set_draw_func(self._draw)
+        self.add_tick_callback(self._animate)
+
+    def _animate(self, _widget, _frame_clock):
+        self.queue_draw()
+        return GLib.SOURCE_CONTINUE
+
+    @classmethod
+    def _draw(cls, _area, context, width, height):
+        now = time.monotonic()
+        scale = min(width / 184, height / 72)
+        context.save()
+        context.translate((width - 184 * scale) / 2, (height - 72 * scale) / 2)
+        context.scale(scale, scale)
+
+        context.set_line_width(2)
+        context.set_source_rgba(1, 1, 1, 0.55)
+        context.rectangle(1, 1, 182, 70)
+        context.stroke()
+
+        key_index = 0
+        for row, columns in enumerate(cls.ROW_LENGTHS):
+            key_width = 14
+            gap = 3
+            row_width = columns * key_width + (columns - 1) * gap
+            start_x = (184 - row_width) / 2
+            y = 9 + row * 14
+            for column in range(columns):
+                phase = now * 2.4 - key_index * 0.32
+                glow = max(0.0, math.sin(phase)) ** 2
+                context.set_source_rgba(
+                    0.21,
+                    0.52,
+                    0.89,
+                    0.16 + 0.78 * glow,
+                )
+                context.rectangle(start_x + column * 17, y, key_width, 9)
+                context.fill()
+                key_index += 1
+        context.restore()
 
 
 class MainWindow(Adw.ApplicationWindow):

@@ -26,12 +26,6 @@ automatically dismissing it:
 python3 gnome/main.py --loading-demo
 ```
 
-The marks displayed there are sourced from the Simple Icons
-[Alienware](https://simpleicons.org/?q=alienware) and
-[Dell](https://simpleicons.org/?q=dell) assets. Dell and Alienware are
-trademarks of Dell Inc. or its subsidiaries; their appearance identifies
-compatible hardware and does not imply endorsement of this application.
-
 Connect to an AW-ELC controller using the tested persistent static-color backend:
 
 ```sh
