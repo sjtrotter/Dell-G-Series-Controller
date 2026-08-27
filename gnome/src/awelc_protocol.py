@@ -46,6 +46,21 @@ class AwElcProtocol:
             raise ProtocolError("AW-ELC reported zero lighting zones")
         return platform, zone_count
 
+    def get_animation_count(self) -> tuple[int, int]:
+        """Return the stored animation count and firmware's maximum ID."""
+        reply = self.exchange(0x20, bytes((0x03,)))
+        count = int.from_bytes(reply[3:5], byteorder="big")
+        return count, reply[5]
+
+    def get_animation_by_index(self, index: int) -> tuple[int, bool, bytes]:
+        """Read one stored animation directory entry without changing it."""
+        if not 0 <= index <= 0xFF:
+            raise ValueError("animation index must fit in one byte")
+        reply = self.exchange(0x20, bytes((0x04, index)))
+        animation_id = int.from_bytes(reply[3:5], byteorder="big")
+        is_custom = reply[5] == 0
+        return animation_id, is_custom, reply
+
     def set_dimness(self, dimness: int, zones: tuple[int, ...]) -> None:
         if not 0 <= dimness <= 100:
             raise ValueError("dimness must be between 0 and 100")
