@@ -144,9 +144,19 @@ class LightingKeyboard(Gtk.DrawingArea):
 
     ROW_LENGTHS = (10, 10, 9, 7)
 
-    def __init__(self, preview_provider=None):
+    ZONE_COLORS = (
+        (0.93, 0.20, 0.25),
+        (0.96, 0.62, 0.12),
+        (0.20, 0.72, 0.35),
+        (0.20, 0.48, 0.94),
+        (0.62, 0.32, 0.88),
+    )
+
+    def __init__(self, preview_provider=None, layout=None, demonstrate_zones=False):
         super().__init__()
         self.preview_provider = preview_provider
+        self.layout = layout
+        self.demonstrate_zones = demonstrate_zones
         self.set_content_width(184)
         self.set_content_height(72)
         self.set_size_request(184, 72)
@@ -183,6 +193,13 @@ class LightingKeyboard(Gtk.DrawingArea):
 
         key_index = 0
         preview = self._preview_color(now) if self.preview_provider else None
+        zone_for_key = {}
+        if self.demonstrate_zones and self.layout:
+            zone_for_key = {
+                key: zone.firmware_id
+                for zone in self.layout.zones
+                for key in zone.key_indices
+            }
         for row, columns in enumerate(self.ROW_LENGTHS):
             key_width = 14
             gap = 3
@@ -192,6 +209,10 @@ class LightingKeyboard(Gtk.DrawingArea):
             for column in range(columns):
                 if preview:
                     color, alpha = preview
+                    if key_index in zone_for_key:
+                        color = self.ZONE_COLORS[
+                            zone_for_key[key_index] % len(self.ZONE_COLORS)
+                        ]
                     context.set_source_rgba(*color, alpha)
                 else:
                     phase = now * 2.4 - key_index * 0.32
@@ -421,7 +442,12 @@ class MainWindow(Adw.ApplicationWindow):
         )
         self.color_panel_subtitle.add_css_class("dim-label")
         color_panel.append(self.color_panel_subtitle)
-        self.keyboard_preview = LightingKeyboard(self._preview_state)
+        self.zone_demo = self.backend.info.platform == "zone-demo"
+        self.keyboard_preview = LightingKeyboard(
+            self._preview_state,
+            layout=self.keyboard_layout,
+            demonstrate_zones=self.zone_demo,
+        )
         self.keyboard_preview.set_content_width(368)
         self.keyboard_preview.set_content_height(112)
         self.keyboard_preview.set_size_request(240, 96)
@@ -436,6 +462,13 @@ class MainWindow(Adw.ApplicationWindow):
             + "; changes reach the keyboard only after Apply"
         )
         color_panel.append(self.keyboard_preview)
+        if self.zone_demo:
+            zone_note = Gtk.Label(
+                label="Synthetic four-zone layout · not a verified hardware map",
+                xalign=0.5,
+            )
+            zone_note.add_css_class("dim-label")
+            color_panel.append(zone_note)
         self.color_flow = Gtk.FlowBox()
         self.color_flow.set_selection_mode(Gtk.SelectionMode.NONE)
         self.color_flow.set_halign(Gtk.Align.START)

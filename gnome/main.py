@@ -22,6 +22,11 @@ def main():
         help="show the interface without accessing hardware",
     )
     mode.add_argument(
+        "--zone-demo",
+        action="store_true",
+        help="show a synthetic four-zone layout without accessing hardware",
+    )
+    mode.add_argument(
         "--hardware",
         action="store_true",
         help="connect to a supported AW-ELC controller",
@@ -40,8 +45,11 @@ def main():
         backend_factory = lambda: AwElcBackend.discover(
             profiles[PowerState.AC_CHARGED]
         )
-    elif args.demo:
-        backend = DemoBackend()
+    elif args.demo or args.zone_demo:
+        backend = DemoBackend(
+            zone_count=4 if args.zone_demo else 1,
+            platform="zone-demo" if args.zone_demo else "0x0e09",
+        )
         settings_store = None
         backend_factory = None
     else:

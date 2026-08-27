@@ -18,7 +18,7 @@ class KeyboardLayoutTest(unittest.TestCase):
         represented = tuple(
             key for zone in layout.zones for key in zone.key_indices
         )
-        self.assertEqual(represented, tuple(range(KEY_COUNT)))
+        self.assertEqual(tuple(sorted(represented)), tuple(range(KEY_COUNT)))
 
     def test_rejects_invalid_zone_count(self):
         with self.assertRaisesRegex(ValueError, "at least one"):

@@ -3,7 +3,8 @@
 from dataclasses import dataclass
 
 
-KEY_COUNT = 36
+ROW_LENGTHS = (10, 10, 9, 7)
+KEY_COUNT = sum(ROW_LENGTHS)
 
 
 @dataclass(frozen=True)
@@ -34,15 +35,22 @@ def layout_for_device(platform_id: int | None, zone_count: int) -> KeyboardLayou
     # Firmware reports IDs and a count, but not where those zones are physically
     # located. Equal groups provide a neutral read-only fallback until a platform
     # map has been verified on real hardware.
+    zone_keys = [[] for _zone in range(zone_count)]
+    key_index = 0
+    for columns in ROW_LENGTHS:
+        for column in range(columns):
+            normalized_x = (column + 0.5) / columns
+            firmware_id = min(int(normalized_x * zone_count), zone_count - 1)
+            zone_keys[firmware_id].append(key_index)
+            key_index += 1
+
     zones = []
     for firmware_id in range(zone_count):
-        start = round(firmware_id * KEY_COUNT / zone_count)
-        end = round((firmware_id + 1) * KEY_COUNT / zone_count)
         zones.append(
             KeyboardZone(
                 firmware_id,
                 f"Zone {firmware_id + 1}",
-                tuple(range(start, end)),
+                tuple(zone_keys[firmware_id]),
             )
         )
     return KeyboardLayout(platform_id, tuple(zones), False)

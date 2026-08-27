@@ -153,13 +153,13 @@ class LightingBackend(Protocol):
 class DemoBackend:
     """In-memory backend used for safe UI development and screenshots."""
 
-    def __init__(self):
+    def __init__(self, zone_count: int = 1, platform: str = "0x0e09"):
         self._info = DeviceInfo(
             name="Dell G16 7620",
             controller="Alienware AW-ELC 187c:0550",
             firmware="1.1.7",
-            platform="0x0e09",
-            zones=1,
+            platform=platform,
+            zones=zone_count,
         )
         self._capabilities = LightingCapabilities(
             effects=frozenset(

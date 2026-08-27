@@ -121,6 +121,12 @@ class LightingSettingsTest(unittest.TestCase):
 
 
 class DemoBackendTest(unittest.TestCase):
+    def test_can_model_a_safe_multizone_ui_demo(self):
+        backend = DemoBackend(zone_count=4, platform="zone-demo")
+        self.assertEqual(backend.info.zones, 4)
+        self.assertEqual(backend.capabilities.zone_count, 4)
+        self.assertEqual(backend.info.platform, "zone-demo")
+
     def test_applies_valid_settings(self):
         backend = DemoBackend()
         settings = LightingSettings(
