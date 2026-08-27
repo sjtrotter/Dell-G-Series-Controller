@@ -52,9 +52,12 @@ class MainWindow(Adw.ApplicationWindow):
         page.add(device_group)
 
         lighting_group = Adw.PreferencesGroup(title="Keyboard lighting")
-        lighting_group.set_description(
-            "Changes in demo mode remain in memory and do not access hardware."
-        )
+        if self.backend.capabilities.persistent_power_states:
+            lighting_group.set_description("Changes remain in memory in demo mode.")
+        else:
+            lighting_group.set_description(
+                "Static changes are sent directly to the connected controller."
+            )
 
         self.enabled = Adw.SwitchRow(title="Lighting enabled")
         self.enabled.set_active(self.backend.settings.enabled)
@@ -85,7 +88,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         apply_row = Adw.ActionRow(
             title="Apply lighting",
-            subtitle="Preview the selected settings in the demo backend",
+            subtitle="Send the selected color and brightness",
         )
         apply_button = Gtk.Button(label="Apply")
         apply_button.add_css_class("suggested-action")
@@ -132,4 +135,4 @@ class MainWindow(Adw.ApplicationWindow):
                 brightness=round(self.brightness.get_value()),
             )
         )
-        self.toast_overlay.add_toast(Adw.Toast(title="Demo settings applied"))
+        self.toast_overlay.add_toast(Adw.Toast(title="Lighting settings applied"))

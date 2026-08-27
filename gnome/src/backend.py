@@ -2,6 +2,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Protocol, TypeAlias
 
+from .awelc_protocol import AwElcProtocol
+from .usb_transport import UsbReportTransport
+
 
 RgbColor: TypeAlias = tuple[int, int, int]
 
@@ -118,4 +121,62 @@ class DemoBackend:
     def apply_lighting(self, settings: LightingSettings) -> None:
         if settings.effect not in self.capabilities.effects:
             raise ValueError(f"unsupported lighting effect: {settings.effect.value}")
+        self._settings = settings
+
+
+class AwElcBackend:
+    """Hardware backend limited to verified volatile AW-ELC commands."""
+
+    def __init__(self, protocol: AwElcProtocol, name: str = "Dell G Series laptop"):
+        self._protocol = protocol
+        version = protocol.get_version()
+        platform, zone_count = protocol.get_platform()
+        self._zones = tuple(range(zone_count))
+        self._info = DeviceInfo(
+            name=name,
+            controller="Alienware AW-ELC",
+            firmware=".".join(str(component) for component in version),
+            platform=f"0x{platform:04x}",
+            zones=zone_count,
+        )
+        self._capabilities = LightingCapabilities(
+            effects=frozenset({LightingEffect.STATIC}),
+            brightness=True,
+            persistent_power_states=False,
+            zone_count=zone_count,
+        )
+        # The volatile protocol cannot query the currently displayed color.
+        self._settings = LightingSettings(
+            enabled=False,
+            effect=LightingEffect.STATIC,
+            primary_color=(255, 255, 255),
+            brightness=100,
+        )
+
+    @classmethod
+    def discover(cls) -> "AwElcBackend":
+        return cls(AwElcProtocol(UsbReportTransport.discover()))
+
+    @property
+    def info(self) -> DeviceInfo:
+        return self._info
+
+    @property
+    def capabilities(self) -> LightingCapabilities:
+        return self._capabilities
+
+    @property
+    def settings(self) -> LightingSettings:
+        return self._settings
+
+    def apply_lighting(self, settings: LightingSettings) -> None:
+        if settings.effect not in self.capabilities.effects:
+            raise ValueError(f"unsupported lighting effect: {settings.effect.value}")
+
+        if settings.enabled:
+            # AW-ELC dimness is inverse: zero is full brightness.
+            self._protocol.set_dimness(100 - settings.brightness, self._zones)
+            self._protocol.set_color(settings.primary_color, self._zones)
+        else:
+            self._protocol.set_color((0, 0, 0), self._zones)
         self._settings = settings

@@ -9,7 +9,8 @@ gi.require_version("Adw", "1")
 gi.require_version("Gtk", "4.0")
 
 from src.application import Application
-from src.backend import DemoBackend
+from src.backend import AwElcBackend, DemoBackend
+from src.usb_transport import DeviceAccessError, DeviceNotFoundError
 
 
 def main():
@@ -19,12 +20,25 @@ def main():
         action="store_true",
         help="show the interface without accessing hardware",
     )
+    parser.add_argument(
+        "--hardware",
+        action="store_true",
+        help="connect to a supported AW-ELC controller",
+    )
     args = parser.parse_args()
 
-    if not args.demo:
-        parser.error("hardware mode is not implemented yet; use --demo")
+    if args.demo == args.hardware:
+        parser.error("choose exactly one of --demo or --hardware")
 
-    app = Application(DemoBackend())
+    if args.hardware:
+        try:
+            backend = AwElcBackend.discover()
+        except (DeviceAccessError, DeviceNotFoundError) as error:
+            parser.error(str(error))
+    else:
+        backend = DemoBackend()
+
+    app = Application(backend)
     return app.run(sys.argv[:1])
 
 

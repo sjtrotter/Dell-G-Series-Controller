@@ -10,5 +10,12 @@ Run the interface without accessing hardware:
 python3 gnome/main.py --demo
 ```
 
-Hardware access is deliberately unavailable until the AW-ELC backend has a
-safe, testable API and appropriate device permissions.
+Connect to an AW-ELC controller using the tested static-color backend:
+
+```sh
+python3 gnome/main.py --hardware
+```
+
+Hardware mode does not invoke `sudo`, reset the USB device, or detach its
+kernel driver. The USB device must be accessible to the current user; a
+narrowly scoped udev rule will be provided with the packaged application.

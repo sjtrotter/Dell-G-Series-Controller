@@ -1,6 +1,23 @@
 import unittest
 
-from src.backend import DemoBackend, LightingEffect, LightingSettings
+from src.backend import AwElcBackend, DemoBackend, LightingEffect, LightingSettings
+
+
+class FakeProtocol:
+    def __init__(self):
+        self.calls = []
+
+    def get_version(self):
+        return (1, 1, 7)
+
+    def get_platform(self):
+        return (0x0E09, 1)
+
+    def set_dimness(self, dimness, zones):
+        self.calls.append(("dimness", dimness, zones))
+
+    def set_color(self, color, zones):
+        self.calls.append(("color", color, zones))
 
 
 class LightingSettingsTest(unittest.TestCase):
@@ -43,6 +60,44 @@ class DemoBackendTest(unittest.TestCase):
         )
         backend.apply_lighting(settings)
         self.assertEqual(backend.settings, settings)
+
+
+class AwElcBackendTest(unittest.TestCase):
+    def test_reads_identity_and_exposes_verified_capabilities(self):
+        backend = AwElcBackend(FakeProtocol())
+        self.assertEqual(backend.info.firmware, "1.1.7")
+        self.assertEqual(backend.info.platform, "0x0e09")
+        self.assertEqual(backend.info.zones, 1)
+        self.assertEqual(backend.capabilities.effects, {LightingEffect.STATIC})
+        self.assertFalse(backend.capabilities.persistent_power_states)
+
+    def test_applies_static_color_and_inverse_dimness(self):
+        protocol = FakeProtocol()
+        backend = AwElcBackend(protocol)
+        settings = LightingSettings(
+            enabled=True,
+            effect=LightingEffect.STATIC,
+            primary_color=(20, 40, 60),
+            brightness=75,
+        )
+        backend.apply_lighting(settings)
+        self.assertEqual(
+            protocol.calls,
+            [("dimness", 25, (0,)), ("color", (20, 40, 60), (0,))],
+        )
+
+    def test_disabling_writes_black_without_changing_dimness(self):
+        protocol = FakeProtocol()
+        backend = AwElcBackend(protocol)
+        backend.apply_lighting(
+            LightingSettings(
+                enabled=False,
+                effect=LightingEffect.STATIC,
+                primary_color=(20, 40, 60),
+                brightness=75,
+            )
+        )
+        self.assertEqual(protocol.calls, [("color", (0, 0, 0), (0,))])
 
 
 if __name__ == "__main__":
