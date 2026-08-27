@@ -16,6 +16,8 @@ from .backend import (
     PowerState,
     unified_power_profiles,
 )
+from .lighting_preview import preview_color
+from .keyboard_layout import layout_for_device
 from .service_status import service_is_running
 from .usb_transport import DeviceAccessError, DeviceNotFoundError
 
@@ -35,6 +37,15 @@ class Application(Adw.Application):
             application_id += ".Demo"
         super().__init__(application_id=application_id)
         self.backend = backend
+        platform_id = None
+        if backend.info.platform.startswith("0x"):
+            try:
+                platform_id = int(backend.info.platform, 16)
+            except ValueError:
+                pass
+        self.keyboard_layout = layout_for_device(
+            platform_id, backend.capabilities.zone_count
+        )
         self.backend_factory = backend_factory
         self.settings_store = settings_store
         self.loading_only = loading_only
@@ -155,44 +166,17 @@ class LightingKeyboard(Gtk.DrawingArea):
         self.queue_draw()
         return GLib.SOURCE_CONTINUE
 
-    @staticmethod
-    def _mix(first, second, amount):
-        return tuple(
-            start + (end - start) * amount
-            for start, end in zip(first, second, strict=True)
-        )
-
     def _preview_color(self, now):
         settings = self.preview_provider()
-        if not settings["enabled"]:
-            return (0.08, 0.08, 0.08), 0.28
-        colors = [
-            tuple(channel / 255 for channel in color)
-            for color in settings["colors"]
-        ]
-        effect = settings["effect"]
-        duration = max(settings["duration"], 1) / 1000
-        brightness = settings["brightness"] / 100
-        if effect is LightingEffect.RAINBOW:
-            colors = [
-                (1, 0, 0), (1, 1, 0), (0, 1, 0),
-                (0, 1, 1), (0, 0, 1), (1, 0, 1),
-            ]
-        elif effect is LightingEffect.BREATHING:
-            colors = [item for color in colors for item in (color, (0, 0, 0))]
-        if effect is LightingEffect.PULSE:
-            tempo = max(settings["tempo"], 1)
-            visible = (now * tempo / 18) % 1 < 0.48
-            color = colors[0] if visible else (0, 0, 0)
-        elif len(colors) > 1:
-            position = (now / duration) % len(colors)
-            index = int(position)
-            color = self._mix(
-                colors[index], colors[(index + 1) % len(colors)], position - index
-            )
-        else:
-            color = colors[0]
-        return tuple(channel * brightness for channel in color), 0.92
+        return preview_color(
+            enabled=settings["enabled"],
+            effect=settings["effect"],
+            colors=tuple(settings["colors"]),
+            brightness=settings["brightness"],
+            duration_ms=settings["duration"],
+            tempo=settings["tempo"],
+            elapsed_seconds=now,
+        )
 
     def _draw(self, _area, context, width, height):
         now = time.monotonic()
@@ -443,7 +427,13 @@ class MainWindow(Adw.ApplicationWindow):
         self.keyboard_preview.set_size_request(240, 96)
         self.keyboard_preview.set_hexpand(True)
         self.keyboard_preview.set_tooltip_text(
-            "Approximate local preview — changes reach the keyboard only after Apply"
+            "Approximate local preview — "
+            + (
+                "zone layout verified for this device"
+                if self.keyboard_layout.validated
+                else "zone positions are placeholders until this platform is verified"
+            )
+            + "; changes reach the keyboard only after Apply"
         )
         color_panel.append(self.keyboard_preview)
         self.color_flow = Gtk.FlowBox()
