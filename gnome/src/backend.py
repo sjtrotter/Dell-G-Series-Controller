@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Protocol, TypeAlias
 
@@ -113,6 +113,19 @@ class LightingSettings:
     def _validate_color(name: str, color: RgbColor) -> None:
         if len(color) != 3 or any(not 0 <= channel <= 255 for channel in color):
             raise ValueError(f"{name} channels must be between 0 and 255")
+
+
+def unified_power_profiles(
+    settings: LightingSettings,
+) -> dict[PowerState, LightingSettings]:
+    """Use one awake policy while keeping both firmware sleep slots off."""
+    sleep = replace(settings, enabled=False)
+    return {
+        state: sleep
+        if state in {PowerState.AC_SLEEP, PowerState.BATTERY_SLEEP}
+        else settings
+        for state in PowerState
+    }
 
 
 class LightingBackend(Protocol):

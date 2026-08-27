@@ -7,6 +7,7 @@ from src.backend import (
     LightingEffect,
     LightingSettings,
     PowerState,
+    unified_power_profiles,
 )
 
 
@@ -94,6 +95,18 @@ class LightingSettingsTest(unittest.TestCase):
                 duration=500,
                 additional_colors=((0, 0, 255),) * 12,
             )
+
+    def test_unified_profiles_keep_sleep_states_off(self):
+        settings = LightingSettings(
+            True, LightingEffect.STATIC, (255, 0, 0), 75
+        )
+        profiles = unified_power_profiles(settings)
+        self.assertFalse(profiles[PowerState.AC_SLEEP].enabled)
+        self.assertFalse(profiles[PowerState.BATTERY_SLEEP].enabled)
+        self.assertEqual(profiles[PowerState.AC_CHARGED], settings)
+        self.assertEqual(profiles[PowerState.AC_CHARGING], settings)
+        self.assertEqual(profiles[PowerState.BATTERY_ON], settings)
+        self.assertEqual(profiles[PowerState.BATTERY_LOW], settings)
 
 
 class DemoBackendTest(unittest.TestCase):

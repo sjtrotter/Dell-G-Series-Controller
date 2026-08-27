@@ -5,7 +5,13 @@ gi.require_version("Gtk", "4.0")
 
 from gi.repository import Adw, Gdk, GLib, Gtk
 
-from .backend import BrightnessMode, LightingEffect, LightingSettings, PowerState
+from .backend import (
+    BrightnessMode,
+    LightingEffect,
+    LightingSettings,
+    PowerState,
+    unified_power_profiles,
+)
 from .service_status import service_is_running
 
 
@@ -343,9 +349,12 @@ class MainWindow(Adw.ApplicationWindow):
             self.backend.apply_power_state(power_state, settings, brightness_mode)
             self.profiles[power_state] = settings
         else:
-            for state in PowerState:
-                self.backend.apply_power_state(state, settings, brightness_mode)
-                self.profiles[state] = settings
+            unified = unified_power_profiles(settings)
+            for state, profile_settings in unified.items():
+                self.backend.apply_power_state(
+                    state, profile_settings, brightness_mode
+                )
+                self.profiles[state] = profile_settings
         if self.settings_store is not None:
             self.settings_store.save_profiles(
                 self.profiles,
@@ -478,7 +487,7 @@ class MainWindow(Adw.ApplicationWindow):
         if separate:
             subtitle = "Use separate lighting for AC, battery, and sleep states"
         else:
-            subtitle = "Apply the same lighting to every firmware power state"
+            subtitle = "Use the same lighting while awake; turn it off during sleep"
         self.profile_mode.set_subtitle(subtitle)
 
     def _selected_power_state(self):
