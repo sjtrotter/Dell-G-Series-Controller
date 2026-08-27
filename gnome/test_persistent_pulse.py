@@ -29,6 +29,12 @@ def main() -> int:
     parser.add_argument("blue", type=bounded_integer("blue", 0, 255))
     parser.add_argument("duration", type=bounded_integer("duration", 4, 4095))
     parser.add_argument(
+        "--tempo",
+        type=bounded_integer("tempo", 1, 255),
+        default=1,
+        help="firmware tempo field (default: 1)",
+    )
+    parser.add_argument(
         "--write",
         action="store_true",
         help="confirm replacement of persistent AC-charged animation 0x005c",
@@ -46,6 +52,7 @@ def main() -> int:
             (args.red, args.green, args.blue),
             zones,
             args.duration,
+            args.tempo,
         )
         protocol.set_dimness(0, zones)
     except (DeviceAccessError, DeviceNotFoundError) as error:
@@ -53,7 +60,8 @@ def main() -> int:
 
     print(
         f"saved color/black pulse RGB({args.red}, {args.green}, {args.blue}), "
-        f"duration {args.duration}, to AC-charged animation 0x005c"
+        f"duration {args.duration}, tempo {args.tempo}, "
+        "to AC-charged animation 0x005c"
     )
     return 0
 
