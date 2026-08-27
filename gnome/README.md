@@ -19,6 +19,13 @@ Run the interface without accessing hardware:
 python3 gnome/main.py --demo
 ```
 
+To inspect the hardware loading window without accessing USB hardware or
+automatically dismissing it:
+
+```bash
+python3 gnome/main.py --loading-demo
+```
+
 Connect to an AW-ELC controller using the tested persistent static-color backend:
 
 ```sh

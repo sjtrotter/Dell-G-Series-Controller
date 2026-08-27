@@ -15,20 +15,23 @@ from src.settings_store import LightingSettingsStore
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument(
         "--demo",
         action="store_true",
         help="show the interface without accessing hardware",
     )
-    parser.add_argument(
+    mode.add_argument(
         "--hardware",
         action="store_true",
         help="connect to a supported AW-ELC controller",
     )
+    mode.add_argument(
+        "--loading-demo",
+        action="store_true",
+        help="show only the persistent hardware loading window",
+    )
     args = parser.parse_args()
-
-    if args.demo == args.hardware:
-        parser.error("choose exactly one of --demo or --hardware")
 
     if args.hardware:
         settings_store = LightingSettingsStore()
@@ -37,12 +40,21 @@ def main():
         backend_factory = lambda: AwElcBackend.discover(
             profiles[PowerState.AC_CHARGED]
         )
-    else:
+    elif args.demo:
         backend = DemoBackend()
         settings_store = None
         backend_factory = None
+    else:
+        backend = None
+        settings_store = None
+        backend_factory = None
 
-    app = Application(backend, settings_store, backend_factory)
+    app = Application(
+        backend,
+        settings_store,
+        backend_factory,
+        loading_only=args.loading_demo,
+    )
     return app.run(sys.argv[:1])
 
 

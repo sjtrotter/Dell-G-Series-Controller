@@ -21,7 +21,13 @@ from .usb_transport import DeviceAccessError, DeviceNotFoundError
 class Application(Adw.Application):
     MINIMUM_LOADING_SECONDS = 1.25
 
-    def __init__(self, backend, settings_store=None, backend_factory=None):
+    def __init__(
+        self,
+        backend,
+        settings_store=None,
+        backend_factory=None,
+        loading_only=False,
+    ):
         application_id = "io.github.cemkaya_mpi.DellGSeriesController"
         if settings_store is None:
             application_id += ".Demo"
@@ -29,14 +35,21 @@ class Application(Adw.Application):
         self.backend = backend
         self.backend_factory = backend_factory
         self.settings_store = settings_store
+        self.loading_only = loading_only
         if settings_store is not None:
             self.profiles = settings_store.load_profiles()
             self.brightness_mode = settings_store.load_brightness_mode()
             self.separate_power_profiles = (
                 settings_store.load_separate_power_profiles()
             )
-        else:
+        elif backend is not None:
             self.profiles = {state: backend.settings for state in PowerState}
+            self.brightness_mode = BrightnessMode.HARDWARE_SCALING
+            self.separate_power_profiles = True
+        else:
+            self.profiles = {
+                state: LightingSettings() for state in PowerState
+            }
             self.brightness_mode = BrightnessMode.HARDWARE_SCALING
             self.separate_power_profiles = True
         self.connect("activate", self.on_activate)
@@ -45,6 +58,9 @@ class Application(Adw.Application):
     def on_activate(self, _application):
         window = self.props.active_window
         if window is None:
+            if self.loading_only:
+                LoadingWindow(self).present()
+                return
             if self.backend is None:
                 window = LoadingWindow(self)
                 window.present()
