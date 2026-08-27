@@ -211,6 +211,12 @@ class MainWindow(Adw.ApplicationWindow):
     def _build_action_bar(self):
         action_bar = Gtk.ActionBar()
         action_bar.add_css_class("view")
+        if self.settings_store is not None:
+            configurations = Gtk.MenuButton()
+            configurations.set_label("Configurations")
+            configurations.set_always_show_arrow(True)
+            configurations.set_popover(self._build_configurations_popover())
+            action_bar.pack_start(configurations)
         self.apply_button = Gtk.Button(label="Apply")
         self.apply_button.add_css_class("suggested-action")
         self.apply_button.set_tooltip_text(
@@ -219,6 +225,48 @@ class MainWindow(Adw.ApplicationWindow):
         self.apply_button.connect("clicked", self._apply)
         action_bar.pack_end(self.apply_button)
         return action_bar
+
+    def _build_configurations_popover(self):
+        popover = Gtk.Popover()
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        content.set_margin_top(12)
+        content.set_margin_bottom(12)
+        content.set_margin_start(12)
+        content.set_margin_end(12)
+
+        title = Gtk.Label(label="Saved configurations", xalign=0)
+        title.add_css_class("heading")
+        content.append(title)
+        self.saved_configuration = Gtk.DropDown()
+        self.saved_configuration.set_size_request(240, -1)
+        content.append(self.saved_configuration)
+
+        actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        actions.set_halign(Gtk.Align.END)
+        self.delete_configuration_button = Gtk.Button(
+            icon_name="user-trash-symbolic"
+        )
+        self.delete_configuration_button.set_tooltip_text(
+            "Delete selected configuration"
+        )
+        self.delete_configuration_button.connect(
+            "clicked", self._confirm_delete_configuration
+        )
+        self.load_configuration_button = Gtk.Button(label="Load")
+        self.load_configuration_button.connect(
+            "clicked", self._load_configuration
+        )
+        save_configuration_button = Gtk.Button(label="Save As…")
+        save_configuration_button.connect(
+            "clicked", self._show_save_configuration_dialog
+        )
+        actions.append(self.delete_configuration_button)
+        actions.append(self.load_configuration_button)
+        actions.append(save_configuration_button)
+        content.append(actions)
+        popover.set_child(content)
+        self._refresh_saved_configurations()
+        return popover
 
     def _build_page(self):
         page = Adw.PreferencesPage()
@@ -253,48 +301,6 @@ class MainWindow(Adw.ApplicationWindow):
         profile_box.append(self.battery_state)
         profile_group.add(profile_box)
         page.add(profile_group)
-
-        if self.settings_store is not None:
-            saved_group = Adw.PreferencesGroup(title="Saved configurations")
-            saved_group.set_description(
-                "Save or restore the complete set of power-state profiles."
-            )
-            self.saved_configuration = Gtk.DropDown()
-            saved_row = Adw.ActionRow(title="Configuration")
-            saved_row.add_suffix(self.saved_configuration)
-            saved_row.set_activatable_widget(self.saved_configuration)
-            saved_group.add(saved_row)
-
-            saved_actions = Gtk.Box(
-                orientation=Gtk.Orientation.HORIZONTAL,
-                spacing=6,
-            )
-            saved_actions.set_halign(Gtk.Align.END)
-            self.load_configuration_button = Gtk.Button(label="Load")
-            self.load_configuration_button.connect(
-                "clicked", self._load_configuration
-            )
-            self.delete_configuration_button = Gtk.Button(
-                icon_name="user-trash-symbolic"
-            )
-            self.delete_configuration_button.set_tooltip_text(
-                "Delete selected configuration"
-            )
-            self.delete_configuration_button.connect(
-                "clicked", self._confirm_delete_configuration
-            )
-            save_configuration_button = Gtk.Button(label="Save As…")
-            save_configuration_button.connect(
-                "clicked", self._show_save_configuration_dialog
-            )
-            saved_actions.append(self.load_configuration_button)
-            saved_actions.append(self.delete_configuration_button)
-            saved_actions.append(save_configuration_button)
-            saved_actions_row = Adw.ActionRow()
-            saved_actions_row.add_suffix(saved_actions)
-            saved_group.add(saved_actions_row)
-            page.add(saved_group)
-            self._refresh_saved_configurations()
 
         lighting_group = Adw.PreferencesGroup(title="Keyboard lighting")
         if self.backend.capabilities.persistent_power_states:
