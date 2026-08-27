@@ -39,6 +39,19 @@ class LightingSettingsStoreTest(unittest.TestCase):
             store.save(settings)
             self.assertEqual(store.load(), settings)
 
+    def test_round_trips_pulse_settings(self):
+        settings = LightingSettings(
+            enabled=True,
+            effect=LightingEffect.PULSE,
+            primary_color=(0, 255, 0),
+            duration=600,
+            brightness=90,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            store = LightingSettingsStore(Path(directory) / "settings.json")
+            store.save(settings)
+            self.assertEqual(store.load(), settings)
+
 
 if __name__ == "__main__":
     unittest.main()

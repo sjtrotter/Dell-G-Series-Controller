@@ -69,10 +69,19 @@ class MainWindow(Adw.ApplicationWindow):
         lighting_group.add(self.enabled)
 
         self.effects = [LightingEffect.STATIC]
+        if LightingEffect.PULSE in self.backend.capabilities.effects:
+            self.effects.append(LightingEffect.PULSE)
         if LightingEffect.MORPH in self.backend.capabilities.effects:
             self.effects.append(LightingEffect.MORPH)
         self.effect = Gtk.DropDown.new_from_strings(
-            ["Static" if effect is LightingEffect.STATIC else "Morph" for effect in self.effects]
+            [
+                {
+                    LightingEffect.STATIC: "Static",
+                    LightingEffect.PULSE: "Blink (firmware Pulse)",
+                    LightingEffect.MORPH: "Morph",
+                }[effect]
+                for effect in self.effects
+            ]
         )
         try:
             selected_effect = self.effects.index(self.backend.settings.effect)
@@ -80,7 +89,9 @@ class MainWindow(Adw.ApplicationWindow):
             selected_effect = 0
         self.effect.set_selected(selected_effect)
         self.effect.connect("notify::selected", self._effect_changed)
-        effect_row = Adw.ActionRow(title="Effect", subtitle="Static color or smooth morph")
+        effect_row = Adw.ActionRow(
+            title="Effect", subtitle="Static, blinking pulse, or smooth morph"
+        )
         effect_row.add_suffix(self.effect)
         effect_row.set_activatable_widget(self.effect)
         lighting_group.add(effect_row)
@@ -126,7 +137,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.duration.set_draw_value(True)
         self.duration.set_value_pos(Gtk.PositionType.RIGHT)
         self.duration_row = Adw.ActionRow(
-            title="Morph duration", subtitle="Firmware transition duration"
+            title="Effect duration", subtitle="Firmware animation timing"
         )
         self.duration_row.add_suffix(self.duration)
         lighting_group.add(self.duration_row)
@@ -207,7 +218,7 @@ class MainWindow(Adw.ApplicationWindow):
             ),
             duration=(
                 round(self.duration.get_value())
-                if selected_effect is LightingEffect.MORPH
+                if selected_effect in {LightingEffect.PULSE, LightingEffect.MORPH}
                 else None
             ),
         )
@@ -218,5 +229,9 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _effect_changed(self, *_args):
         is_morph = self.effects[self.effect.get_selected()] is LightingEffect.MORPH
+        is_animated = self.effects[self.effect.get_selected()] in {
+            LightingEffect.PULSE,
+            LightingEffect.MORPH,
+        }
         self.secondary_color_row.set_visible(is_morph)
-        self.duration_row.set_visible(is_morph)
+        self.duration_row.set_visible(is_animated)

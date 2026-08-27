@@ -11,6 +11,7 @@ RgbColor: TypeAlias = tuple[int, int, int]
 
 class LightingEffect(Enum):
     STATIC = "static"
+    PULSE = "pulse"
     MORPH = "morph"
     STATIC_AND_MORPH = "static-and-morph"
 
@@ -51,11 +52,12 @@ class LightingSettings:
             self._validate_color("secondary_color", self.secondary_color)
         if not 0 <= self.brightness <= 100:
             raise ValueError("brightness must be between 0 and 100")
-        if self.effect is not LightingEffect.STATIC:
+        if self.effect is LightingEffect.MORPH:
             if self.secondary_color is None:
                 raise ValueError("morph effects require a secondary color")
+        if self.effect in {LightingEffect.PULSE, LightingEffect.MORPH}:
             if self.duration is None or self.duration < 1:
-                raise ValueError("morph effects require a positive duration")
+                raise ValueError("animated effects require a positive duration")
 
     @staticmethod
     def _validate_color(name: str, color: RgbColor) -> None:
@@ -91,6 +93,7 @@ class DemoBackend:
             effects=frozenset(
                 {
                     LightingEffect.STATIC,
+                    LightingEffect.PULSE,
                     LightingEffect.MORPH,
                     LightingEffect.STATIC_AND_MORPH,
                 }
@@ -145,7 +148,9 @@ class AwElcBackend:
             zones=zone_count,
         )
         self._capabilities = LightingCapabilities(
-            effects=frozenset({LightingEffect.STATIC, LightingEffect.MORPH}),
+            effects=frozenset(
+                {LightingEffect.STATIC, LightingEffect.PULSE, LightingEffect.MORPH}
+            ),
             brightness=True,
             persistent_power_states=True,
             zone_count=zone_count,
@@ -190,6 +195,13 @@ class AwElcBackend:
                     animation_id,
                     settings.primary_color,
                     settings.secondary_color,
+                    self._zones,
+                    settings.duration,
+                )
+            elif settings.enabled and settings.effect is LightingEffect.PULSE:
+                self._protocol.save_pulse_animation(
+                    animation_id,
+                    settings.primary_color,
                     self._zones,
                     settings.duration,
                 )

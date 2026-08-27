@@ -36,6 +36,9 @@ class FakeProtocol:
             )
         )
 
+    def save_pulse_animation(self, animation_id, color, zones, duration):
+        self.calls.append(("save-pulse", animation_id, color, zones, duration))
+
 
 class LightingSettingsTest(unittest.TestCase):
     def test_valid_static_settings(self):
@@ -87,7 +90,7 @@ class AwElcBackendTest(unittest.TestCase):
         self.assertEqual(backend.info.zones, 1)
         self.assertEqual(
             backend.capabilities.effects,
-            {LightingEffect.STATIC, LightingEffect.MORPH},
+            {LightingEffect.STATIC, LightingEffect.PULSE, LightingEffect.MORPH},
         )
         self.assertTrue(backend.capabilities.persistent_power_states)
 
@@ -154,6 +157,28 @@ class AwElcBackendTest(unittest.TestCase):
             ],
         )
         self.assertEqual(protocol.calls[3], ("dimness", 20, (0,)))
+
+    def test_applies_verified_blinking_pulse_to_awake_power_states(self):
+        protocol = FakeProtocol()
+        backend = AwElcBackend(protocol)
+        backend.apply_lighting(
+            LightingSettings(
+                enabled=True,
+                effect=LightingEffect.PULSE,
+                primary_color=(0, 255, 0),
+                duration=600,
+                brightness=90,
+            )
+        )
+        self.assertEqual(
+            protocol.calls[:3],
+            [
+                ("save-pulse", 0x5C, (0, 255, 0), (0,), 600),
+                ("save-pulse", 0x5D, (0, 255, 0), (0,), 600),
+                ("save-pulse", 0x5F, (0, 255, 0), (0,), 600),
+            ],
+        )
+        self.assertEqual(protocol.calls[3], ("dimness", 10, (0,)))
 
 
 if __name__ == "__main__":
