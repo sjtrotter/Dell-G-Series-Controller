@@ -46,17 +46,12 @@ class AwElcProtocol:
             raise ProtocolError("AW-ELC reported zero lighting zones")
         return platform, zone_count
 
-    def get_animation_directory(self) -> tuple[int, tuple[int, ...], bytes]:
-        """Return the animation count, advertised IDs, and unmodified reply."""
+    def get_animation_directory(self) -> tuple[int, int, bytes]:
+        """Return the animation count, maximum candidate ID, and raw reply."""
         reply = self.exchange(0x20, bytes((0x03,)))
         count = int.from_bytes(reply[3:5], byteorder="big")
-        available_entries = (len(reply) - 5) // 2
-        parsed_entries = min(count, available_entries)
-        animation_ids = tuple(
-            int.from_bytes(reply[5 + offset : 7 + offset], byteorder="big")
-            for offset in range(0, parsed_entries * 2, 2)
-        )
-        return count, animation_ids, reply
+        maximum_id = int.from_bytes(reply[5:7], byteorder="big")
+        return count, maximum_id, reply
 
     def get_animation_by_id(self, animation_id: int) -> tuple[int, bool, bytes]:
         """Read one advertised animation ID without changing it."""

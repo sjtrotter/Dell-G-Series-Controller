@@ -42,8 +42,8 @@ class ProtocolTest(unittest.TestCase):
         transport = FakeTransport((count_reply, entry_reply))
         protocol = AwElcProtocol(transport)
 
-        count, animation_ids, directory_raw = protocol.get_animation_directory()
-        self.assertEqual((count, animation_ids), (1, (0x81,)))
+        count, maximum_id, directory_raw = protocol.get_animation_directory()
+        self.assertEqual((count, maximum_id), (1, 0x81))
         self.assertEqual(directory_raw, count_reply)
         animation_id, is_custom, raw = protocol.get_animation_by_id(0x81)
         self.assertEqual((animation_id, is_custom), (0x81, True))
