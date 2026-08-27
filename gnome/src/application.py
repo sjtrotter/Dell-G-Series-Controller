@@ -7,7 +7,7 @@ import gi
 gi.require_version("Adw", "1")
 gi.require_version("Gtk", "4.0")
 
-from gi.repository import Adw, Gdk, GLib, Gtk
+from gi.repository import Adw, Gdk, GLib, GObject, Gtk
 
 from .backend import (
     BrightnessMode,
@@ -202,6 +202,16 @@ class MainWindow(Adw.ApplicationWindow):
         self._edit_generation = 0
         self.set_title("Dell G-Series Laptop Keyboard Controller")
         self.set_default_size(620, 640)
+        self.color_panel_css = Gtk.CssProvider()
+        self.color_panel_css.load_from_string(
+            ".color-index { color: white; font-weight: 700; "
+            "text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95); }"
+        )
+        Gtk.StyleContext.add_provider_for_display(
+            self.get_display(),
+            self.color_panel_css,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+        )
 
         self.toast_overlay = Adw.ToastOverlay()
         toolbar_view = Adw.ToolbarView()
@@ -368,32 +378,42 @@ class MainWindow(Adw.ApplicationWindow):
             1.0,
         )
         self.color.set_rgba(rgba)
-        color_row = Adw.ActionRow(title="Color", subtitle="Static keyboard color")
-        self.color_row = color_row
-        color_row.add_suffix(self.color)
-        color_row.set_activatable_widget(self.color)
-        lighting_group.add(color_row)
+        self.color_panel_row = Adw.PreferencesRow()
+        color_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        color_panel.set_margin_top(12)
+        color_panel.set_margin_bottom(12)
+        color_panel.set_margin_start(12)
+        color_panel.set_margin_end(12)
+        self.color_panel_title = Gtk.Label(label="Color", xalign=0)
+        self.color_panel_title.add_css_class("heading")
+        color_panel.append(self.color_panel_title)
+        self.color_panel_subtitle = Gtk.Label(
+            label="Static keyboard color", xalign=0
+        )
+        self.color_panel_subtitle.add_css_class("dim-label")
+        color_panel.append(self.color_panel_subtitle)
+        self.color_flow = Gtk.FlowBox()
+        self.color_flow.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.color_flow.set_halign(Gtk.Align.START)
+        self.color_flow.set_homogeneous(False)
+        self.color_flow.set_column_spacing(8)
+        self.color_flow.set_row_spacing(8)
+        self.color_flow.set_max_children_per_line(7)
+        color_panel.append(self.color_flow)
+        self.color_panel_row.set_child(color_panel)
+        lighting_group.add(self.color_panel_row)
 
-        self.morph_colors = Adw.ExpanderRow(
-            title="Morph colors",
-            subtitle="Additional transition targets",
-        )
-        self.additional_color_rows = []
         self.additional_color_buttons = []
-        self.add_color_button = Gtk.Button(label="Add Color")
-        self.add_color_button.set_valign(Gtk.Align.CENTER)
+        self.add_color_button = Gtk.Button(icon_name="list-add-symbolic")
+        self.add_color_button.set_size_request(40, 40)
+        self.add_color_button.set_halign(Gtk.Align.START)
+        self.add_color_button.set_hexpand(False)
+        self.add_color_button.set_tooltip_text("Add another color")
         self.add_color_button.connect("clicked", self._add_color_clicked)
-        self.add_color_row = Adw.ActionRow(
-            title="Add another color",
-            subtitle="Up to 12 transition targets",
-        )
-        self.add_color_row.add_suffix(self.add_color_button)
-        self.add_color_row.set_activatable_widget(self.add_color_button)
         initial_colors = self.backend.settings.colors[1:]
         for color in initial_colors:
             self._add_morph_color(color)
-        self.morph_colors.add_row(self.add_color_row)
-        lighting_group.add(self.morph_colors)
+        self._refresh_color_panel()
 
         self.duration = Gtk.Scale.new_with_range(
             Gtk.Orientation.HORIZONTAL, 4, 4095, 1
@@ -771,18 +791,14 @@ class MainWindow(Adw.ApplicationWindow):
         is_breathing = selected_effect is LightingEffect.BREATHING
         if is_morph and not self.additional_color_buttons:
             self._add_morph_color((0, 0, 255))
-        self.morph_colors.set_title(
-            "Morph colors" if is_morph else "Breathing colors"
-        )
-        self._update_morph_color_rows()
+        self._refresh_color_panel()
         is_animated = selected_effect in {
             LightingEffect.PULSE,
             LightingEffect.MORPH,
             LightingEffect.BREATHING,
             LightingEffect.RAINBOW,
         }
-        self.morph_colors.set_visible(is_morph or is_breathing)
-        self.color_row.set_visible(
+        self.color_panel_row.set_visible(
             self.effects[self.effect.get_selected()] is not LightingEffect.RAINBOW
         )
         self.duration_row.set_visible(is_animated)
@@ -796,9 +812,8 @@ class MainWindow(Adw.ApplicationWindow):
         maximum = 6 if selected_effect is LightingEffect.BREATHING else 12
         if len(self.additional_color_buttons) + 1 >= maximum:
             return
-        self.morph_colors.remove(self.add_color_row)
         self._add_morph_color((255, 255, 255))
-        self.morph_colors.add_row(self.add_color_row)
+        self._refresh_color_panel()
         self._control_changed()
 
     def _add_morph_color(self, color):
@@ -806,71 +821,100 @@ class MainWindow(Adw.ApplicationWindow):
             dialog=Gtk.ColorDialog(title="Animation color")
         )
         self._set_color(button, color)
-        row = Adw.ActionRow()
-        controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        up = Gtk.Button(icon_name="go-up-symbolic")
-        up.set_tooltip_text("Move color earlier")
-        down = Gtk.Button(icon_name="go-down-symbolic")
-        down.set_tooltip_text("Move color later")
-        remove = Gtk.Button(icon_name="user-trash-symbolic")
-        remove.set_tooltip_text("Remove color")
-        up.connect("clicked", lambda _button: self._move_morph_color(button, -1))
-        down.connect("clicked", lambda _button: self._move_morph_color(button, 1))
-        remove.connect("clicked", lambda _button: self._remove_morph_color(button))
-        controls.append(button)
-        controls.append(up)
-        controls.append(down)
-        controls.append(remove)
-        row.add_suffix(controls)
-        self.additional_color_rows.append(row)
         self.additional_color_buttons.append(button)
         button.connect("notify::rgba", self._control_changed)
-        self.morph_colors.add_row(row)
-        self._update_morph_color_rows()
 
     def _remove_morph_color(self, button):
         is_morph = self.effects[self.effect.get_selected()] is LightingEffect.MORPH
         if is_morph and len(self.additional_color_buttons) <= 1:
             return
         index = self.additional_color_buttons.index(button)
-        self.morph_colors.remove(self.additional_color_rows[index])
-        self.additional_color_rows.pop(index)
         self.additional_color_buttons.pop(index)
-        self._update_morph_color_rows()
+        self._refresh_color_panel()
         self._control_changed()
 
-    def _move_morph_color(self, button, offset):
+    def _prepare_color_drag(self, _source, _x, _y, button):
         buttons = [self.color, *self.additional_color_buttons]
-        index = buttons.index(button)
-        target = index + offset
-        if not 0 <= target < len(buttons):
-            return
-        first = self._button_color(buttons[index])
-        second = self._button_color(buttons[target])
-        self._set_color(buttons[index], second)
-        self._set_color(buttons[target], first)
+        return Gdk.ContentProvider.new_for_value(str(buttons.index(button)))
+
+    def _drop_color(self, _target, value, _x, _y, target_button):
+        buttons = [self.color, *self.additional_color_buttons]
+        try:
+            source_index = int(value)
+            target_index = buttons.index(target_button)
+            colors = [self._button_color(button) for button in buttons]
+            moved = colors.pop(source_index)
+        except (ValueError, IndexError):
+            return False
+        if source_index < target_index:
+            target_index -= 1
+        colors.insert(target_index, moved)
+        for button, color in zip(buttons, colors, strict=True):
+            self._set_color(button, color)
         self._control_changed()
+        return True
 
     def _set_morph_colors(self, colors):
-        self.morph_colors.remove(self.add_color_row)
-        for row in self.additional_color_rows:
-            self.morph_colors.remove(row)
-        self.additional_color_rows.clear()
         self.additional_color_buttons.clear()
         for color in colors:
             self._add_morph_color(color)
-        self.morph_colors.add_row(self.add_color_row)
+        self._refresh_color_panel()
 
-    def _update_morph_color_rows(self):
-        total = len(self.additional_color_rows) + 1
-        for index, row in enumerate(self.additional_color_rows, start=2):
-            row.set_title(f"Color {index}")
+    def _refresh_color_panel(self):
+        while child := self.color_flow.get_first_child():
+            self.color_flow.remove(child)
         effect = self.effects[self.effect.get_selected()]
-        label = "breathing" if effect is LightingEffect.BREATHING else "transition"
+        multicolor = effect in {LightingEffect.MORPH, LightingEffect.BREATHING}
+        buttons = [self.color, *self.additional_color_buttons] if multicolor else [self.color]
+        for index, button in enumerate(buttons, start=1):
+            tile = Gtk.Overlay()
+            tile.set_size_request(40, 40)
+            tile.set_halign(Gtk.Align.START)
+            tile.set_hexpand(False)
+            button.set_size_request(40, 40)
+            button.set_halign(Gtk.Align.FILL)
+            button.set_hexpand(False)
+            tile.set_child(button)
+            number = Gtk.Label(label=str(index))
+            number.set_can_target(False)
+            number.add_css_class("color-index")
+            tile.add_overlay(number)
+            if index > 1:
+                remove = Gtk.Button(icon_name="window-close-symbolic")
+                remove.add_css_class("flat")
+                remove.set_halign(Gtk.Align.END)
+                remove.set_valign(Gtk.Align.START)
+                remove.set_tooltip_text(f"Remove color {index}")
+                remove.connect(
+                    "clicked",
+                    lambda _remove, color_button=button: self._remove_morph_color(
+                        color_button
+                    ),
+                )
+                tile.add_overlay(remove)
+            drag = Gtk.DragSource(actions=Gdk.DragAction.MOVE)
+            drag.connect("prepare", self._prepare_color_drag, button)
+            tile.add_controller(drag)
+            drop = Gtk.DropTarget.new(GObject.TYPE_STRING, Gdk.DragAction.MOVE)
+            drop.connect("drop", self._drop_color, button)
+            tile.add_controller(drop)
+            self.color_flow.append(tile)
+        total = len(buttons)
+        if effect is LightingEffect.MORPH:
+            title = "Morph colors"
+            subtitle = f"{total} transition colors · drag to reorder"
+        elif effect is LightingEffect.BREATHING:
+            title = "Breathing colors"
+            subtitle = f"{total} colors separated by darkness · drag to reorder"
+        else:
+            title = "Color"
+            subtitle = "Keyboard color"
+        self.color_panel_title.set_label(title)
+        self.color_panel_subtitle.set_label(subtitle)
         maximum = 6 if effect is LightingEffect.BREATHING else 12
-        self.morph_colors.set_subtitle(f"{total} {label} colors")
-        self.add_color_row.set_subtitle(f"Up to {maximum} colors")
         self.add_color_button.set_sensitive(total < maximum)
+        if multicolor:
+            self.color_flow.append(self.add_color_button)
 
     @staticmethod
     def _button_color(button):
