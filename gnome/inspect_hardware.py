@@ -40,6 +40,11 @@ def main() -> int:
             time.sleep(0.06)
         if found != count:
             print(f"warning: found {found} of {count} stored animations")
+            legacy_raw = protocol.get_animation_by_legacy_id(maximum_id)
+            print(
+                f"legacy 16-bit query[0x{maximum_id:04x}] raw: "
+                f"{format_report(legacy_raw)}"
+            )
     except (DeviceAccessError, DeviceNotFoundError) as error:
         print(f"error: {error}")
         return 1

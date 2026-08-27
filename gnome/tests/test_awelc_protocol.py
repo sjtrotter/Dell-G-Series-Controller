@@ -56,6 +56,13 @@ class ProtocolTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "fit in one byte"):
             protocol.get_animation_by_id(256)
 
+    def test_builds_legacy_16_bit_animation_query(self):
+        reply = bytes((3, 0x20, 4, 0, 0x81)).ljust(33, b"\0")
+        transport = FakeTransport((reply,))
+        raw = AwElcProtocol(transport).get_animation_by_legacy_id(0x81)
+        self.assertEqual(raw, reply)
+        self.assertEqual(transport.reports[0][:5], bytes((3, 0x20, 4, 0, 0x81)))
+
     def test_rejects_mismatched_reply(self):
         reply = bytes((3, 0x26)).ljust(33, b"\0")
         with self.assertRaisesRegex(ProtocolError, "does not match"):

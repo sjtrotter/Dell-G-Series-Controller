@@ -62,6 +62,12 @@ class AwElcProtocol:
         is_custom = reply[5] == 0
         return returned_id, is_custom, reply
 
+    def get_animation_by_legacy_id(self, animation_id: int) -> bytes:
+        """Query a 16-bit animation ID used by older AW-ELC firmware."""
+        if not 0 <= animation_id <= 0xFFFF:
+            raise ValueError("legacy animation ID must fit in two bytes")
+        return self.exchange(0x20, bytes((0x04,)) + animation_id.to_bytes(2, "big"))
+
     def set_dimness(self, dimness: int, zones: tuple[int, ...]) -> None:
         if not 0 <= dimness <= 100:
             raise ValueError("dimness must be between 0 and 100")
