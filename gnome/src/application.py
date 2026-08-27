@@ -217,6 +217,14 @@ class MainWindow(Adw.ApplicationWindow):
             configurations.set_always_show_arrow(True)
             configurations.set_popover(self._build_configurations_popover())
             action_bar.pack_start(configurations)
+            save_configuration = Gtk.Button(label="Save New")
+            save_configuration.set_tooltip_text(
+                "Save the current settings as a new configuration"
+            )
+            save_configuration.connect(
+                "clicked", self._show_save_configuration_dialog
+            )
+            action_bar.pack_start(save_configuration)
         self.apply_button = Gtk.Button(label="Apply")
         self.apply_button.add_css_class("suggested-action")
         self.apply_button.set_tooltip_text(
@@ -239,6 +247,9 @@ class MainWindow(Adw.ApplicationWindow):
         content.append(title)
         self.saved_configuration = Gtk.DropDown()
         self.saved_configuration.set_size_request(240, -1)
+        self.saved_configuration.connect(
+            "notify::selected", self._load_configuration
+        )
         content.append(self.saved_configuration)
 
         actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -252,17 +263,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.delete_configuration_button.connect(
             "clicked", self._confirm_delete_configuration
         )
-        self.load_configuration_button = Gtk.Button(label="Load")
-        self.load_configuration_button.connect(
-            "clicked", self._load_configuration
-        )
-        save_configuration_button = Gtk.Button(label="Save As…")
-        save_configuration_button.connect(
-            "clicked", self._show_save_configuration_dialog
-        )
         actions.append(self.delete_configuration_button)
-        actions.append(self.load_configuration_button)
-        actions.append(save_configuration_button)
         content.append(actions)
         popover.set_child(content)
         self._refresh_saved_configurations()
@@ -573,6 +574,7 @@ class MainWindow(Adw.ApplicationWindow):
         return profiles
 
     def _refresh_saved_configurations(self, select_name=None):
+        self._refreshing_saved_configurations = True
         self.saved_configuration_names = list(
             self.settings_store.list_saved_configurations()
         )
@@ -584,8 +586,8 @@ class MainWindow(Adw.ApplicationWindow):
             )
         available = bool(self.saved_configuration_names)
         self.saved_configuration.set_sensitive(available)
-        self.load_configuration_button.set_sensitive(available)
         self.delete_configuration_button.set_sensitive(available)
+        self._refreshing_saved_configurations = False
 
     def _selected_configuration_name(self):
         if not self.saved_configuration_names:
@@ -632,7 +634,9 @@ class MainWindow(Adw.ApplicationWindow):
             Adw.Toast(title=f'Saved configuration “{name}”')
         )
 
-    def _load_configuration(self, _button):
+    def _load_configuration(self, *_args):
+        if getattr(self, "_refreshing_saved_configurations", False):
+            return
         name = self._selected_configuration_name()
         if name is None:
             return

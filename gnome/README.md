@@ -13,10 +13,10 @@ visible, while animation timing, brightness-backend choices, and hardware
 details use native libadwaita expander rows. Unavailable performance and fan
 controls are omitted.
 
-The bottom bar keeps both the Apply action and a compact configurations menu
-available while the settings page scrolls. Named configurations store the
-complete set of AC, battery, and sleep profiles locally. Loading one updates
-the editor first; it is not written to the keyboard until **Apply** is pressed.
+The bottom bar keeps Apply, Configurations, and Save New available while the
+settings page scrolls. Selecting a named configuration loads its complete set
+of AC, battery, and sleep profiles into the editor; it is not written to the
+keyboard until **Apply** is pressed.
 
 Run the interface without accessing hardware:
 
