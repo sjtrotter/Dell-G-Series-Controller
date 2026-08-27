@@ -2,6 +2,7 @@ import unittest
 
 from src.backend import (
     AwElcBackend,
+    BrightnessMode,
     DemoBackend,
     LightingEffect,
     LightingSettings,
@@ -204,6 +205,52 @@ class AwElcBackendTest(unittest.TestCase):
             [
                 ("save-static", 0x60, (255, 0, 0), (0,)),
                 ("dimness", 30, (0,)),
+            ],
+        )
+
+    def test_embeds_profile_brightness_by_scaling_colors(self):
+        protocol = FakeProtocol()
+        backend = AwElcBackend(protocol)
+        settings = LightingSettings(
+            enabled=True,
+            effect=LightingEffect.MORPH,
+            primary_color=(200, 100, 50),
+            secondary_color=(20, 40, 60),
+            duration=500,
+            brightness=50,
+        )
+        backend.apply_power_state(
+            PowerState.BATTERY_ON,
+            settings,
+            BrightnessMode.HARDWARE_SCALING,
+        )
+        self.assertEqual(
+            protocol.calls,
+            [
+                ("save-morph", 0x5F, (100, 50, 25), (10, 20, 30), (0,), 500),
+                ("dimness", 0, (0,)),
+            ],
+        )
+
+    def test_exact_profile_brightness_uses_global_dimness(self):
+        protocol = FakeProtocol()
+        backend = AwElcBackend(protocol)
+        settings = LightingSettings(
+            enabled=True,
+            effect=LightingEffect.STATIC,
+            primary_color=(200, 100, 50),
+            brightness=50,
+        )
+        backend.apply_power_state(
+            PowerState.AC_CHARGED,
+            settings,
+            BrightnessMode.EXACT_SERVICE,
+        )
+        self.assertEqual(
+            protocol.calls,
+            [
+                ("save-static", 0x5C, (200, 100, 50), (0,)),
+                ("dimness", 50, (0,)),
             ],
         )
 

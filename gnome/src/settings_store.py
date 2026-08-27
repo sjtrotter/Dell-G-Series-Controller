@@ -2,7 +2,7 @@ import json
 import os
 from pathlib import Path
 
-from .backend import LightingEffect, LightingSettings, PowerState
+from .backend import BrightnessMode, LightingEffect, LightingSettings, PowerState
 
 
 class LightingSettingsStore:
@@ -50,10 +50,26 @@ class LightingSettingsStore:
             pass
         return defaults
 
-    def save_profiles(self, profiles: dict[PowerState, LightingSettings]) -> None:
+    def load_brightness_mode(self) -> BrightnessMode:
+        try:
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+            return BrightnessMode(
+                data.get(
+                    "brightness_mode", BrightnessMode.HARDWARE_SCALING.value
+                )
+            )
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            return BrightnessMode.HARDWARE_SCALING
+
+    def save_profiles(
+        self,
+        profiles: dict[PowerState, LightingSettings],
+        brightness_mode: BrightnessMode = BrightnessMode.HARDWARE_SCALING,
+    ) -> None:
         self._write(
             {
                 "version": 2,
+                "brightness_mode": brightness_mode.value,
                 "profiles": {
                     state.name: self._encode(settings)
                     for state, settings in profiles.items()

@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.backend import LightingEffect, LightingSettings, PowerState
+from src.backend import BrightnessMode, LightingEffect, LightingSettings, PowerState
 from src.settings_store import LightingSettingsStore
 
 
@@ -86,6 +86,16 @@ class LightingSettingsStoreTest(unittest.TestCase):
             )
             self.assertNotEqual(
                 loaded[PowerState.AC_CHARGED], loaded[PowerState.AC_CHARGING]
+            )
+
+    def test_round_trips_brightness_mode(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = LightingSettingsStore(Path(directory) / "settings.json")
+            store.save_profiles(
+                store.load_profiles(), BrightnessMode.EXACT_SERVICE
+            )
+            self.assertEqual(
+                store.load_brightness_mode(), BrightnessMode.EXACT_SERVICE
             )
 
 

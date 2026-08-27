@@ -37,6 +37,11 @@ class PowerState(Enum):
         self.animation_id = animation_id
 
 
+class BrightnessMode(Enum):
+    HARDWARE_SCALING = "hardware-scaling"
+    EXACT_SERVICE = "exact-service"
+
+
 @dataclass(frozen=True)
 class LightingCapabilities:
     effects: frozenset[LightingEffect]
@@ -103,7 +108,10 @@ class LightingBackend(Protocol):
     def apply_lighting(self, settings: LightingSettings) -> None: ...
 
     def apply_power_state(
-        self, power_state: PowerState, settings: LightingSettings
+        self,
+        power_state: PowerState,
+        settings: LightingSettings,
+        brightness_mode: BrightnessMode = BrightnessMode.EXACT_SERVICE,
     ) -> None: ...
 
 
@@ -156,7 +164,10 @@ class DemoBackend:
         self._settings = settings
 
     def apply_power_state(
-        self, _power_state: PowerState, settings: LightingSettings
+        self,
+        _power_state: PowerState,
+        settings: LightingSettings,
+        _brightness_mode: BrightnessMode = BrightnessMode.EXACT_SERVICE,
     ) -> None:
         self.apply_lighting(settings)
 
@@ -229,13 +240,40 @@ class AwElcBackend:
         self._settings = settings
 
     def apply_power_state(
-        self, power_state: PowerState, settings: LightingSettings
+        self,
+        power_state: PowerState,
+        settings: LightingSettings,
+        brightness_mode: BrightnessMode = BrightnessMode.EXACT_SERVICE,
     ) -> None:
         if settings.effect not in self.capabilities.effects:
             raise ValueError(f"unsupported lighting effect: {settings.effect.value}")
-        self._save_animation(power_state.animation_id, settings)
-        self._protocol.set_dimness(100 - settings.brightness, self._zones)
+        if power_state in {PowerState.AC_SLEEP, PowerState.BATTERY_SLEEP}:
+            # A user service cannot run while the machine is suspended.
+            brightness_mode = BrightnessMode.HARDWARE_SCALING
+        stored_settings = settings
+        if brightness_mode is BrightnessMode.HARDWARE_SCALING:
+            stored_settings = self._scaled_settings(settings)
+        self._save_animation(power_state.animation_id, stored_settings)
+        dimness = 0 if brightness_mode is BrightnessMode.HARDWARE_SCALING else 100 - settings.brightness
+        self._protocol.set_dimness(dimness, self._zones)
         self._settings = settings
+
+    @staticmethod
+    def _scaled_settings(settings: LightingSettings) -> LightingSettings:
+        def scale(color: RgbColor | None) -> RgbColor | None:
+            if color is None:
+                return None
+            return tuple(round(channel * settings.brightness / 100) for channel in color)
+
+        return LightingSettings(
+            enabled=settings.enabled,
+            effect=settings.effect,
+            primary_color=scale(settings.primary_color),
+            brightness=100,
+            secondary_color=scale(settings.secondary_color),
+            duration=settings.duration,
+            tempo=settings.tempo,
+        )
 
     def _save_animation(self, animation_id: int, settings: LightingSettings) -> None:
         color = settings.primary_color if settings.enabled else (0, 0, 0)

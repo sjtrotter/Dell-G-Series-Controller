@@ -5,7 +5,7 @@ gi.require_version("Gtk", "4.0")
 
 from gi.repository import Adw, Gdk, Gtk
 
-from .backend import LightingEffect, LightingSettings
+from .backend import BrightnessMode, LightingEffect, LightingSettings, PowerState
 
 
 class Application(Adw.Application):
@@ -13,6 +13,12 @@ class Application(Adw.Application):
         super().__init__(application_id="io.github.cemkaya_mpi.DellGSeriesController")
         self.backend = backend
         self.settings_store = settings_store
+        if settings_store is not None:
+            self.profiles = settings_store.load_profiles()
+            self.brightness_mode = settings_store.load_brightness_mode()
+        else:
+            self.profiles = {state: backend.settings for state in PowerState}
+            self.brightness_mode = BrightnessMode.HARDWARE_SCALING
         self.connect("activate", self.on_activate)
 
     def on_activate(self, _application):
@@ -63,6 +69,36 @@ class MainWindow(Adw.ApplicationWindow):
             lighting_group.set_description(
                 "Static changes are sent directly to the connected controller."
             )
+
+        self.power_states = list(PowerState)
+        self.power_state = Gtk.DropDown.new_from_strings(
+            [state.label for state in self.power_states]
+        )
+        self.power_state.set_selected(self.power_states.index(PowerState.AC_CHARGED))
+        power_state_row = Adw.ActionRow(
+            title="Profile", subtitle="AC, battery, sleep, or low-battery behavior"
+        )
+        power_state_row.add_suffix(self.power_state)
+        power_state_row.set_activatable_widget(self.power_state)
+        lighting_group.add(power_state_row)
+
+        self.brightness_modes = [
+            BrightnessMode.HARDWARE_SCALING,
+            BrightnessMode.EXACT_SERVICE,
+        ]
+        self.brightness_method = Gtk.DropDown.new_from_strings(
+            ["Hardware-only color scaling", "Exact brightness service"]
+        )
+        self.brightness_method.set_selected(
+            self.brightness_modes.index(self.brightness_mode)
+        )
+        brightness_method_row = Adw.ActionRow(
+            title="Profile brightness",
+            subtitle="Hardware-only works without login; exact mode requires the user service",
+        )
+        brightness_method_row.add_suffix(self.brightness_method)
+        brightness_method_row.set_activatable_widget(self.brightness_method)
+        lighting_group.add(brightness_method_row)
 
         self.enabled = Adw.SwitchRow(title="Lighting enabled")
         self.enabled.set_active(self.backend.settings.enabled)
@@ -154,6 +190,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.tempo_row.add_suffix(self.tempo)
         lighting_group.add(self.tempo_row)
         self._effect_changed()
+        self.power_state.connect("notify::selected", self._power_state_changed)
 
         self.brightness = Gtk.Scale.new_with_range(
             Gtk.Orientation.HORIZONTAL, 0, 100, 1
@@ -239,9 +276,14 @@ class MainWindow(Adw.ApplicationWindow):
                 else None
             ),
         )
-        self.backend.apply_lighting(settings)
+        power_state = self.power_states[self.power_state.get_selected()]
+        brightness_mode = self.brightness_modes[
+            self.brightness_method.get_selected()
+        ]
+        self.backend.apply_power_state(power_state, settings, brightness_mode)
+        self.profiles[power_state] = settings
         if self.settings_store is not None:
-            self.settings_store.save(settings)
+            self.settings_store.save_profiles(self.profiles, brightness_mode)
         self.toast_overlay.add_toast(Adw.Toast(title="Lighting settings applied"))
 
     def _effect_changed(self, *_args):
@@ -255,3 +297,28 @@ class MainWindow(Adw.ApplicationWindow):
         self.tempo_row.set_visible(
             self.effects[self.effect.get_selected()] is LightingEffect.PULSE
         )
+
+    def _power_state_changed(self, *_args):
+        state = self.power_states[self.power_state.get_selected()]
+        settings = self.profiles[state]
+        self.enabled.set_active(settings.enabled)
+        self.effect.set_selected(
+            self.effects.index(settings.effect)
+            if settings.effect in self.effects
+            else 0
+        )
+        self._set_color(self.color, settings.primary_color)
+        self._set_color(
+            self.secondary_color, settings.secondary_color or (0, 0, 255)
+        )
+        self.brightness.set_value(settings.brightness)
+        self.duration.set_value(settings.duration or 500)
+        self.tempo.set_value(settings.tempo or 100)
+        self._effect_changed()
+
+    @staticmethod
+    def _set_color(button, color):
+        rgba = Gdk.RGBA()
+        rgba.red, rgba.green, rgba.blue = (channel / 255 for channel in color)
+        rgba.alpha = 1.0
+        button.set_rgba(rgba)
