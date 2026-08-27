@@ -24,6 +24,10 @@ class GetZonesTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "invalid zone count"):
             awelc.get_zones(FakeElc(0))
 
+    def test_oversized_zone_count_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "invalid zone count"):
+            awelc.get_zones(FakeElc(29))
+
 
 if __name__ == "__main__":
     unittest.main()

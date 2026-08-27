@@ -19,6 +19,18 @@ class FakeTransport:
         return next(self.replies)
 
 
+class FailingTransport:
+    def __init__(self, fail_at):
+        self.fail_at = fail_at
+        self.reports = []
+
+    def exchange(self, report):
+        self.reports.append(report)
+        if len(self.reports) - 1 == self.fail_at:
+            raise OSError("injected transport failure")
+        return bytes((report[0], report[1])).ljust(33, b"\0")
+
+
 class BuildReportTest(unittest.TestCase):
     def test_builds_padded_33_byte_report(self):
         report = build_report(0x27, bytes((255, 0, 0, 0, 1, 0)))
@@ -41,6 +53,17 @@ class ProtocolTest(unittest.TestCase):
         self.assertEqual(
             transport.reports[0][:8], bytes((3, 0x27, 255, 0, 0, 0, 1, 0))
         )
+
+    def test_rejects_oversized_platform_zone_count(self):
+        reply = bytes((3, 0x20, 0, 0x0E, 0x09, 29)).ljust(33, b"\0")
+        with self.assertRaisesRegex(ProtocolError, "at most 28"):
+            AwElcProtocol(FakeTransport((reply,))).get_platform()
+
+    def test_rejects_duplicate_zones_before_exchange(self):
+        transport = FakeTransport(())
+        with self.assertRaisesRegex(ValueError, "duplicated"):
+            AwElcProtocol(transport).set_color((255, 0, 0), (0, 0))
+        self.assertEqual(transport.reports, [])
 
     def test_reads_animation_summary_using_observed_layout(self):
         count_reply = bytes((3, 0x20, 3, 0, 1, 0, 0x81)).ljust(33, b"\0")
@@ -76,6 +99,16 @@ class ProtocolTest(unittest.TestCase):
             [report[: len(prefix)] for report, prefix in zip(transport.reports, prefixes)],
             prefixes,
         )
+
+    def test_transport_failure_stops_each_animation_transaction_boundary(self):
+        for fail_at in range(6):
+            with self.subTest(fail_at=fail_at):
+                transport = FailingTransport(fail_at)
+                with self.assertRaisesRegex(OSError, "injected"):
+                    AwElcProtocol(transport).save_static_animation(
+                        0x5D, (255, 0, 0), (0,)
+                    )
+                self.assertEqual(len(transport.reports), fail_at + 1)
 
     def test_validates_animation_action_fields(self):
         with self.assertRaisesRegex(ValueError, "duration"):

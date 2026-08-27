@@ -2,6 +2,7 @@ import math
 import threading
 import time
 from dataclasses import replace
+from contextlib import nullcontext
 
 import gi
 
@@ -19,8 +20,7 @@ from .backend import (
 )
 from .lighting_preview import preview_color
 from .keyboard_layout import layout_for_device
-from .service_status import service_is_running
-from .usb_transport import DeviceAccessError, DeviceNotFoundError
+from .service_status import acquire_controller_lock, service_is_running
 
 
 class Application(Adw.Application):
@@ -79,8 +79,14 @@ class Application(Adw.Application):
 
         def discover():
             try:
-                backend = self.backend_factory()
-            except (DeviceAccessError, DeviceNotFoundError) as error:
+                transaction = (
+                    acquire_controller_lock()
+                    if self.settings_store is not None
+                    else nullcontext()
+                )
+                with transaction:
+                    backend = self.backend_factory()
+            except Exception as error:
                 GLib.idle_add(self._discovery_failed, loading_window, str(error))
                 return
             GLib.idle_add(self._discovery_finished, loading_window, backend)
@@ -705,14 +711,31 @@ class MainWindow(Adw.ApplicationWindow):
 
         def apply_in_background():
             try:
-                if self.zone_demo:
-                    self.zone_drafts[self.active_zone] = settings
-                    for zone, zone_settings in self.zone_drafts.items():
-                        self.backend.apply_zone_lighting(zone, zone_settings)
-                for state, profile_settings in operations:
-                    self.backend.apply_power_state(
-                        state, profile_settings, brightness_mode
-                    )
+                transaction = (
+                    acquire_controller_lock()
+                    if self.settings_store is not None
+                    else nullcontext()
+                )
+                with transaction:
+                    if self.zone_demo:
+                        self.zone_drafts[self.active_zone] = settings
+                        for zone, zone_settings in self.zone_drafts.items():
+                            self.backend.apply_zone_lighting(zone, zone_settings)
+                    completed = []
+                    for state, profile_settings in operations:
+                        try:
+                            self.backend.apply_power_state(
+                                state, profile_settings, brightness_mode
+                            )
+                        except Exception as error:
+                            names = ", ".join(item.label for item in completed)
+                            progress = f" after updating {names}" if names else ""
+                            raise RuntimeError(
+                                f"firmware update stopped{progress} while writing "
+                                f"{state.label}; that slot may be incomplete. "
+                                "Keep the app open and retry Apply"
+                            ) from error
+                        completed.append(state)
                 if self.settings_store is not None:
                     self.settings_store.save_profiles(
                         profiles,

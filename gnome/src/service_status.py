@@ -5,6 +5,7 @@ from typing import IO
 
 
 LOCK_NAME = "dell-g-series-controller-brightness.lock"
+CONTROLLER_LOCK_NAME = "dell-g-series-controller-device.lock"
 
 
 def runtime_directory() -> Path:
@@ -16,6 +17,19 @@ def runtime_directory() -> Path:
 
 def lock_path() -> Path:
     return runtime_directory() / LOCK_NAME
+
+
+def controller_lock_path() -> Path:
+    return runtime_directory() / CONTROLLER_LOCK_NAME
+
+
+def acquire_controller_lock(path: Path | None = None) -> IO[str]:
+    """Serialize complete controller transactions across user processes."""
+    path = path or controller_lock_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle = path.open("a+", encoding="utf-8")
+    fcntl.flock(handle, fcntl.LOCK_EX)
+    return handle
 
 
 def acquire_service_lock(path: Path | None = None) -> IO[str]:

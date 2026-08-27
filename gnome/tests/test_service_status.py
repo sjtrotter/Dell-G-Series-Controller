@@ -2,7 +2,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.service_status import acquire_service_lock, service_is_running
+from src.service_status import (
+    acquire_controller_lock,
+    acquire_service_lock,
+    service_is_running,
+)
 
 
 class ServiceStatusTest(unittest.TestCase):
@@ -31,3 +35,17 @@ class ServiceStatusTest(unittest.TestCase):
             path = Path(directory) / "service.lock"
             path.write_text("1234\n", encoding="utf-8")
             self.assertFalse(service_is_running(path))
+
+    def test_controller_transaction_lock_is_exclusive(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "controller.lock"
+            first = acquire_controller_lock(path)
+            second = path.open("a+", encoding="utf-8")
+            try:
+                import fcntl
+
+                with self.assertRaises(BlockingIOError):
+                    fcntl.flock(second, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            finally:
+                second.close()
+                first.close()

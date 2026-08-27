@@ -8,6 +8,7 @@ HID_GET_REPORT = 0x01
 HID_OUTPUT_REPORT = 0x0200
 HID_INPUT_REPORT = 0x0100
 REPORT_SIZE = 33
+TRANSFER_TIMEOUT_MS = 2000
 
 
 class DeviceNotFoundError(RuntimeError):
@@ -53,6 +54,7 @@ class UsbReportTransport:
                 HID_OUTPUT_REPORT,
                 0,
                 report,
+                timeout=TRANSFER_TIMEOUT_MS,
             )
             if written != REPORT_SIZE:
                 raise DeviceAccessError(
@@ -64,6 +66,7 @@ class UsbReportTransport:
                 HID_INPUT_REPORT,
                 0,
                 REPORT_SIZE,
+                timeout=TRANSFER_TIMEOUT_MS,
             )
         except DeviceAccessError:
             raise

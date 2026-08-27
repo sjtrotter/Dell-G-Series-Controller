@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from contextlib import nullcontext
 from pathlib import Path
 
 from service import BrightnessService, detect_power_state
@@ -63,7 +64,9 @@ class BrightnessServiceTest(unittest.TestCase):
             )
             store.save_profiles(profiles, BrightnessMode.EXACT_SERVICE)
             protocol = FakeProtocol()
-            service = BrightnessService(store, root, protocol)
+            service = BrightnessService(
+                store, root, protocol, controller_lock_factory=nullcontext
+            )
 
             self.assertEqual(service.update(), (PowerState.AC_CHARGED, 40))
             self.assertIsNone(service.update())
@@ -81,6 +84,7 @@ class BrightnessServiceTest(unittest.TestCase):
                 store,
                 root,
                 protocol_factory=lambda: protocols.pop(0),
+                controller_lock_factory=nullcontext,
             )
 
             self.assertEqual(service.update(), (PowerState.AC_CHARGED, 100))

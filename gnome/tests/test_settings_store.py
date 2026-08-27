@@ -71,6 +71,10 @@ class LightingSettingsStoreTest(unittest.TestCase):
             store = LightingSettingsStore(Path(directory) / "settings.json")
             store.save(settings)
             self.assertEqual(store.load(), settings)
+            self.assertEqual(store.path.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(
+                list(store.path.parent.glob(f".{store.path.name}.*")), []
+            )
 
     def test_invalid_file_is_treated_as_unknown(self):
         with tempfile.TemporaryDirectory() as directory:

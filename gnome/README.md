@@ -45,6 +45,28 @@ Run the interface without accessing hardware:
 python3 gnome/main.py --demo
 ```
 
+The frontend requires Python 3, PyGObject, GTK 4, and libadwaita. Building and
+running the packaging tests additionally requires Meson and GLib's schema
+compiler. On Fedora these development-checkout dependencies can be installed
+with:
+
+```sh
+sudo dnf install python3-gobject gtk4 libadwaita meson glib2-devel
+```
+
+Preview the multi-zone interaction without accessing USB hardware:
+
+```sh
+python3 gnome/main.py --zone-demo
+```
+
+This is a stateful, in-memory four-zone mock. Click anywhere on the rendered
+keyboard to select the nearest zone, edit each zone independently, and use
+**Apply** to write the settings back to mock memory. The colored zone geometry
+is intentionally synthetic: AW-ELC reports zone IDs and a count, but not their
+physical keyboard positions. This mode verifies UI behavior only and is not
+evidence that a particular controller supports every effect combination.
+
 To inspect the hardware loading window without accessing USB hardware or
 automatically dismissing it:
 
@@ -59,8 +81,8 @@ python3 gnome/main.py --hardware
 ```
 
 Hardware mode does not invoke `sudo`, reset the USB device, or detach its
-kernel driver. The USB device must be accessible to the current user; a
-narrowly scoped udev rule will be provided with the packaged application.
+kernel driver. The USB device must be accessible to the current user; the
+packaged application includes a narrowly scoped udev rule.
 
 Inspect kernel-provided fan, temperature, and platform-profile support without
 making hardware changes:
@@ -104,6 +126,42 @@ adding, removing, and reordering targets within that verified limit. Firmware
 Morph can introduce a dark phase between some otherwise bright color pairs
 (including red and yellow), so this is treated as controller behavior rather
 than software RGB interpolation.
+
+The protocol can place multiple action series, each targeting a different set
+of zone IDs, inside one stored power-state animation. That transaction shape is
+implemented and unit tested from the legacy controller behavior, but has not
+been exercised on this project's single-zone Dell G16 7620 test machine.
+Independent multi-zone effects, synchronization, physical zone maps, and
+device-specific action limits therefore require validation on real multi-zone
+hardware before they should be enabled as a production editing mode.
+
+## Upstream hardware test checklist
+
+Use `--zone-demo` first to review the interaction without a controller. On a
+test machine with AW-ELC hardware:
+
+1. Confirm the USB ID is `187c:0550` or `187c:0551` and install the scoped udev
+   rule shown below.
+2. Run `python3 gnome/main.py --hardware` as the desktop user, never with
+   `sudo`.
+3. Verify static color and brightness, then Morph, Breathing, Rainbow, and
+   Flash. **Apply** replaces the selected firmware power-state animation.
+4. Confirm the stored effect returns after the controller's lighting timeout,
+   suspend/resume, AC changes, and reboot.
+5. On multi-zone hardware, record the platform ID, reported zone count, actual
+   physical zone ordering, supported independent effects, and any transaction
+   failure before adding its layout to the validated registry.
+
+The firmware does not expose readable animation contents on the tested
+firmware. Keep a known-good configuration available because an interrupted
+write may require applying it again.
+
+Linux hidraw report ioctls do not provide a portable per-call timeout. Hardware
+writes therefore run outside the GTK thread, and the systemd service has a
+bounded stop timeout, but a wedged kernel/device ioctl can leave one Apply
+worker waiting until the kernel returns it. This is a known transport limitation
+and is a reason to keep the frontend experimental while broader hardware is
+tested.
 
 For an unpackaged development checkout, test exact brightness once with:
 
@@ -153,7 +211,7 @@ For development, install the included device-access rule and reload udev:
 sudo install -Dm644 gnome/data/70-dell-g-series-controller.rules \
   /usr/lib/udev/rules.d/70-dell-g-series-controller.rules
 sudo udevadm control --reload-rules
-sudo udevadm trigger --subsystem-match=usb --attr-match=idVendor=187c
+sudo udevadm trigger --subsystem-match=hidraw
 ```
 
 The rule uses systemd-logind's `uaccess` tag, granting access only to the

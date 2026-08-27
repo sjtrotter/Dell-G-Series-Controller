@@ -3,6 +3,13 @@ set -eu
 
 gnome_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 python_path=$(command -v python3)
+case "$python_path$gnome_dir" in
+    *[!A-Za-z0-9_./-]*)
+        printf '%s\n' \
+            "Development service paths may contain only letters, numbers, _, ., /, and -." >&2
+        exit 1
+        ;;
+esac
 config_home=${XDG_CONFIG_HOME:-"$HOME/.config"}
 unit_dir="$config_home/systemd/user"
 unit_name=dell-g-series-controller-brightness.service

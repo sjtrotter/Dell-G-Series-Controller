@@ -12,7 +12,7 @@ from src.awelc_protocol import AwElcProtocol
 from src.backend import BrightnessMode, PowerState
 from src.hidraw_transport import HidrawReportTransport
 from src.settings_store import LightingSettingsStore
-from src.service_status import acquire_service_lock
+from src.service_status import acquire_controller_lock, acquire_service_lock
 from src.usb_transport import DeviceAccessError, DeviceNotFoundError
 
 
@@ -48,6 +48,7 @@ class BrightnessService:
         power_supply_root: Path,
         protocol: AwElcProtocol | None = None,
         protocol_factory: Callable[[], AwElcProtocol] | None = None,
+        controller_lock_factory: Callable = acquire_controller_lock,
     ):
         self.store = store
         self.power_supply_root = power_supply_root
@@ -55,6 +56,7 @@ class BrightnessService:
         self.protocol_factory = protocol_factory or (
             lambda: AwElcProtocol(HidrawReportTransport.discover())
         )
+        self.controller_lock_factory = controller_lock_factory
         self.zones = None
         self.last_signature = None
 
@@ -79,8 +81,9 @@ class BrightnessService:
         signature = (state, settings.brightness, self.store.revision())
         if signature == self.last_signature:
             return None
-        self._connect()
-        self.protocol.set_dimness(100 - settings.brightness, self.zones)
+        with self.controller_lock_factory():
+            self._connect()
+            self.protocol.set_dimness(100 - settings.brightness, self.zones)
         self.last_signature = signature
         return state, settings.brightness
 

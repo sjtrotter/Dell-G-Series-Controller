@@ -16,8 +16,8 @@ class FakeDevice:
         self.reply = reply or bytes(range(33))
         self.calls = []
 
-    def ctrl_transfer(self, *args):
-        self.calls.append(args)
+    def ctrl_transfer(self, *args, **kwargs):
+        self.calls.append((args, kwargs))
         return self.written if len(self.calls) == 1 else self.reply
 
 
@@ -29,8 +29,12 @@ class UsbReportTransportTest(unittest.TestCase):
         reply = UsbReportTransport(device).exchange(report)
 
         self.assertEqual(reply, bytes(range(33)))
-        self.assertEqual(device.calls[0], (0x21, 9, 0x0200, 0, report))
-        self.assertEqual(device.calls[1], (0xA1, 1, 0x0100, 0, 33))
+        self.assertEqual(
+            device.calls[0], ((0x21, 9, 0x0200, 0, report), {"timeout": 2000})
+        )
+        self.assertEqual(
+            device.calls[1], ((0xA1, 1, 0x0100, 0, 33), {"timeout": 2000})
+        )
 
     def test_rejects_partial_output_report(self):
         with self.assertRaisesRegex(DeviceAccessError, "accepted 12 of 33"):

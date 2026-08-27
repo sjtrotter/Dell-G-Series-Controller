@@ -11,11 +11,12 @@ DURATION_BATTERY_LOW = 0xff
 DURATION_MIN = 0x00
 TEMPO_MAX = 0xff
 TEMPO_MIN = 0x01
+MAX_ZONES_PER_REPORT = 28
 
 def get_zones(elc):
     """Return the zone IDs reported by the controller."""
     _platform, zone_count = elc.get_platform()
-    if not 1 <= zone_count <= 0xff:
+    if not 1 <= zone_count <= MAX_ZONES_PER_REPORT:
         raise ValueError(
             "AW-ELC reported an invalid zone count: {}".format(zone_count)
         )

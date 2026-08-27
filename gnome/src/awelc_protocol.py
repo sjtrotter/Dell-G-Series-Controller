@@ -3,6 +3,7 @@ from typing import Protocol
 
 
 REPORT_SIZE = 33
+MAX_ZONES_PER_REPORT = REPORT_SIZE - 5
 REPORT_ID = 0x03
 USER_ANIMATION = 0x21
 POWER_ANIMATION = 0x22
@@ -94,6 +95,11 @@ class AwElcProtocol:
         zone_count = reply[5]
         if zone_count < 1:
             raise ProtocolError("AW-ELC reported zero lighting zones")
+        if zone_count > MAX_ZONES_PER_REPORT:
+            raise ProtocolError(
+                f"AW-ELC reported {zone_count} zones; this protocol supports at most "
+                f"{MAX_ZONES_PER_REPORT}"
+            )
         return platform, zone_count
 
     def get_animation_summary(self) -> tuple[int, int, bytes]:
@@ -247,5 +253,11 @@ class AwElcProtocol:
     def _validate_zones(zones: tuple[int, ...]) -> None:
         if not zones:
             raise ValueError("at least one zone is required")
-        if len(zones) > 0xff or any(not 0 <= zone <= 0xff for zone in zones):
-            raise ValueError("zone IDs and count must fit in one byte")
+        if len(zones) > MAX_ZONES_PER_REPORT:
+            raise ValueError(
+                f"a series supports at most {MAX_ZONES_PER_REPORT} zones"
+            )
+        if len(set(zones)) != len(zones):
+            raise ValueError("zone IDs must not be duplicated")
+        if any(not 0 <= zone <= 0xff for zone in zones):
+            raise ValueError("zone IDs must fit in one byte")
