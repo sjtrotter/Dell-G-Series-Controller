@@ -9,7 +9,7 @@ gi.require_version("Adw", "1")
 gi.require_version("Gtk", "4.0")
 
 from src.application import Application
-from src.backend import AwElcBackend, DemoBackend, PowerState
+from src.backend import AwElcBackend, DemoBackend
 from src.settings_store import LightingSettingsStore
 from src.usb_transport import DeviceAccessError, DeviceNotFoundError
 
@@ -33,9 +33,8 @@ def main():
 
     if args.hardware:
         settings_store = LightingSettingsStore()
-        profiles = settings_store.load_profiles()
         try:
-            backend = AwElcBackend.discover(profiles[PowerState.AC_CHARGED])
+            backend = AwElcBackend.discover(settings_store.load())
         except (DeviceAccessError, DeviceNotFoundError) as error:
             parser.error(str(error))
     else:

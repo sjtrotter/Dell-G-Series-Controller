@@ -19,10 +19,9 @@ python3 gnome/main.py --hardware
 Hardware mode does not invoke `sudo`, reset the USB device, or detach its
 kernel driver. The USB device must be accessible to the current user; a
 narrowly scoped udev rule will be provided with the packaged application.
-The power-state selector edits any one of the controller's six firmware slots:
-AC sleep, charged, and charging; and battery sleep, on, and low. Apply writes
-only the selected slot. Brightness remains global because AW-ELC exposes
-dimness separately from the stored animations.
+Apply writes the selected effect to the normal AC-charged, AC-charging, and
+battery-on slots. Sleep and low-battery policy remain internal because AW-ELC
+stores no per-animation brightness; dimness is a separate global command.
 
 Verified effects on AW-ELC firmware 1.1.7 are static color, a two-color smooth
 morph, and the firmware's pulse effect. Pulse is presented as Flash: it uses
