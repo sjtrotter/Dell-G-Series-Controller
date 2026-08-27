@@ -1,6 +1,8 @@
-import gi
 import threading
 import time
+from pathlib import Path
+
+import gi
 
 gi.require_version("Adw", "1")
 gi.require_version("Gtk", "4.0")
@@ -124,19 +126,18 @@ class LoadingWindow(Adw.ApplicationWindow):
         status = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         status.set_halign(Gtk.Align.CENTER)
         status.set_valign(Gtk.Align.CENTER)
-        status.append(AlienMark())
-        brands = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        brands.set_halign(Gtk.Align.CENTER)
-        alienware = Gtk.Label(label="ALIENWARE")
-        alienware.add_css_class("heading")
-        brands.append(alienware)
-        separator = Gtk.Label(label="•")
-        separator.add_css_class("dim-label")
-        brands.append(separator)
-        dell = Gtk.Label(label="DELL G-SERIES")
-        dell.add_css_class("heading")
-        brands.append(dell)
-        status.append(brands)
+        asset_dir = Path(__file__).parent.parent / "data"
+        alienware_logo = Gtk.Picture.new_for_filename(
+            str(asset_dir / "alienware.svg")
+        )
+        alienware_logo.set_size_request(142, 170)
+        alienware_logo.set_content_fit(Gtk.ContentFit.CONTAIN)
+        status.append(alienware_logo)
+        dell_logo_path = asset_dir / "dell.svg"
+        dell_logo = Gtk.Picture.new_for_filename(str(dell_logo_path))
+        dell_logo.set_size_request(64, 64)
+        dell_logo.set_content_fit(Gtk.ContentFit.CONTAIN)
+        status.append(dell_logo)
         keyboard = Gtk.Image.new_from_icon_name("input-keyboard-symbolic")
         keyboard.set_pixel_size(44)
         status.append(keyboard)
@@ -152,43 +153,6 @@ class LoadingWindow(Adw.ApplicationWindow):
         status.append(spinner)
         toolbar_view.set_content(status)
         self.set_content(toolbar_view)
-
-
-class AlienMark(Gtk.DrawingArea):
-    """Small original monochrome alien motif for the connection screen."""
-
-    def __init__(self):
-        super().__init__()
-        self.set_content_width(156)
-        self.set_content_height(123)
-        self.set_size_request(156, 123)
-        self.set_draw_func(self._draw)
-
-    @staticmethod
-    def _draw(_area, context, width, height):
-        context.save()
-        context.translate(width / 2, height / 2)
-        context.scale(width / 104, height / 82)
-
-        context.set_source_rgba(1, 1, 1, 0.96)
-        context.move_to(0, -36)
-        context.curve_to(-34, -34, -46, -13, -35, 12)
-        context.curve_to(-27, 30, -11, 39, 0, 40)
-        context.curve_to(11, 39, 27, 30, 35, 12)
-        context.curve_to(46, -13, 34, -34, 0, -36)
-        context.close_path()
-        context.fill()
-
-        context.set_source_rgba(0.08, 0.09, 0.11, 1)
-        for x in (-17, 17):
-            context.save()
-            context.translate(x, 2)
-            context.rotate(-0.22 if x < 0 else 0.22)
-            context.scale(1.0, 1.65)
-            context.arc(0, 0, 7, 0, 6.283185307)
-            context.fill()
-            context.restore()
-        context.restore()
 
 
 class MainWindow(Adw.ApplicationWindow):

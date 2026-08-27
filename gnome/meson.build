@@ -20,6 +20,12 @@ install_subdir(
   exclude_directories: ['__pycache__'],
 )
 
+install_data(
+  'data/alienware.svg',
+  'data/dell.svg',
+  install_dir: join_paths(runtime_dir, 'data'),
+)
+
 configure_file(
   input: 'data/dell-g-series-controller.in',
   output: 'dell-g-series-controller',
