@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Explicit one-slot hardware test for the AW-ELC pulse action."""
+"""Explicit one-slot hardware test for color/black AW-ELC pulse actions."""
 
 import argparse
 
@@ -22,7 +22,7 @@ def bounded_integer(name: str, minimum: int, maximum: int):
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="replace AC-charged animation 0x005c with a pulse test"
+        description="replace AC-charged animation 0x005c with a color/black pulse test"
     )
     parser.add_argument("red", type=bounded_integer("red", 0, 255))
     parser.add_argument("green", type=bounded_integer("green", 0, 255))
@@ -52,7 +52,7 @@ def main() -> int:
         parser.error(str(error))
 
     print(
-        f"saved pulse RGB({args.red}, {args.green}, {args.blue}), "
+        f"saved color/black pulse RGB({args.red}, {args.green}, {args.blue}), "
         f"duration {args.duration}, to AC-charged animation 0x005c"
     )
     return 0

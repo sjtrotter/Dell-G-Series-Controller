@@ -174,10 +174,13 @@ class AwElcProtocol:
         duration: int,
         tempo: int = 1,
     ) -> None:
-        """Replace one slot with the firmware's single-action pulse effect."""
+        """Replace one slot with pulse transitions to the color and black."""
         self.save_animation(
             animation_id,
-            (AnimationAction(1, duration, tempo, color),),
+            (
+                AnimationAction(1, duration, tempo, color),
+                AnimationAction(1, duration, tempo, (0, 0, 0)),
+            ),
             zones,
         )
 
