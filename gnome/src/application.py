@@ -5,6 +5,8 @@ gi.require_version("Gtk", "4.0")
 
 from gi.repository import Adw, Gdk, Gtk
 
+from .backend import LightingEffect, LightingSettings
+
 
 class Application(Adw.Application):
     def __init__(self, backend):
@@ -55,7 +57,7 @@ class MainWindow(Adw.ApplicationWindow):
         )
 
         self.enabled = Adw.SwitchRow(title="Lighting enabled")
-        self.enabled.set_active(self.backend.enabled)
+        self.enabled.set_active(self.backend.settings.enabled)
         lighting_group.add(self.enabled)
 
         self.color = Gtk.ColorDialogButton(dialog=Gtk.ColorDialog(title="Keyboard color"))
@@ -70,7 +72,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.brightness = Gtk.Scale.new_with_range(
             Gtk.Orientation.HORIZONTAL, 0, 100, 1
         )
-        self.brightness.set_value(self.backend.brightness)
+        self.brightness.set_value(self.backend.settings.brightness)
         self.brightness.set_size_request(220, -1)
         self.brightness.set_hexpand(True)
         self.brightness.set_draw_value(True)
@@ -123,6 +125,11 @@ class MainWindow(Adw.ApplicationWindow):
             round(channel * 255) for channel in (rgba.red, rgba.green, rgba.blue)
         )
         self.backend.apply_lighting(
-            self.enabled.get_active(), color, round(self.brightness.get_value())
+            LightingSettings(
+                enabled=self.enabled.get_active(),
+                effect=LightingEffect.STATIC,
+                primary_color=color,
+                brightness=round(self.brightness.get_value()),
+            )
         )
         self.toast_overlay.add_toast(Adw.Toast(title="Demo settings applied"))
