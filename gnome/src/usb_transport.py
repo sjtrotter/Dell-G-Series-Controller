@@ -33,10 +33,13 @@ class UsbReportTransport:
                 "PyUSB is required for AW-ELC hardware access"
             ) from error
 
-        for product_id in PRODUCT_IDS:
-            device = usb.core.find(idVendor=VENDOR_ID, idProduct=product_id)
-            if device is not None:
-                return cls(device)
+        try:
+            for product_id in PRODUCT_IDS:
+                device = usb.core.find(idVendor=VENDOR_ID, idProduct=product_id)
+                if device is not None:
+                    return cls(device)
+        except usb.core.NoBackendError as error:
+            raise DeviceAccessError("PyUSB could not load a libusb backend") from error
         supported = ", ".join(f"187c:{product_id:04x}" for product_id in PRODUCT_IDS)
         raise DeviceNotFoundError(f"No AW-ELC controller found ({supported})")
 

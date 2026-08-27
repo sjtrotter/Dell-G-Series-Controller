@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import patch
 
+import usb.core
+
 from src.usb_transport import (
     DeviceAccessError,
     DeviceNotFoundError,
@@ -45,6 +47,11 @@ class UsbReportTransportTest(unittest.TestCase):
         with self.assertRaisesRegex(DeviceNotFoundError, "187c:0550, 187c:0551"):
             UsbReportTransport.discover()
         self.assertEqual(find.call_count, 2)
+
+    @patch("usb.core.find", side_effect=usb.core.NoBackendError("missing"))
+    def test_reports_missing_libusb_backend(self, _find):
+        with self.assertRaisesRegex(DeviceAccessError, "load a libusb backend"):
+            UsbReportTransport.discover()
 
 
 if __name__ == "__main__":
