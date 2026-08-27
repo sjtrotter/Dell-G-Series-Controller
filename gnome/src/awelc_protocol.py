@@ -166,6 +166,21 @@ class AwElcProtocol:
         )
         self.save_animation(animation_id, actions, zones)
 
+    def save_pulse_animation(
+        self,
+        animation_id: int,
+        color: tuple[int, int, int],
+        zones: tuple[int, ...],
+        duration: int,
+        tempo: int = 1,
+    ) -> None:
+        """Replace one slot with the firmware's single-action pulse effect."""
+        self.save_animation(
+            animation_id,
+            (AnimationAction(1, duration, tempo, color),),
+            zones,
+        )
+
     @staticmethod
     def _zone_payload(prefix: bytes, zones: tuple[int, ...]) -> bytes:
         AwElcProtocol._validate_zones(zones)
