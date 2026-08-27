@@ -205,7 +205,11 @@ class MainWindow(Adw.ApplicationWindow):
         self.color_panel_css = Gtk.CssProvider()
         self.color_panel_css.load_from_string(
             ".color-index { color: white; font-weight: 700; "
-            "text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95); }"
+            "text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95); } "
+            ".color-remove { min-width: 18px; min-height: 18px; "
+            "padding: 0; border-radius: 999px; color: white; "
+            "background: #c01c28; } "
+            ".color-remove:hover { background: #e01b24; }"
         )
         Gtk.StyleContext.add_provider_for_display(
             self.get_display(),
@@ -861,8 +865,12 @@ class MainWindow(Adw.ApplicationWindow):
         self._refresh_color_panel()
 
     def _refresh_color_panel(self):
-        while child := self.color_flow.get_first_child():
-            self.color_flow.remove(child)
+        while flow_child := self.color_flow.get_first_child():
+            content = flow_child.get_child()
+            if isinstance(content, Gtk.Overlay):
+                content.set_child(None)
+            flow_child.set_child(None)
+            self.color_flow.remove(flow_child)
         effect = self.effects[self.effect.get_selected()]
         multicolor = effect in {LightingEffect.MORPH, LightingEffect.BREATHING}
         buttons = [self.color, *self.additional_color_buttons] if multicolor else [self.color]
@@ -881,7 +889,8 @@ class MainWindow(Adw.ApplicationWindow):
             tile.add_overlay(number)
             if index > 1:
                 remove = Gtk.Button(icon_name="window-close-symbolic")
-                remove.add_css_class("flat")
+                remove.add_css_class("color-remove")
+                remove.set_size_request(18, 18)
                 remove.set_halign(Gtk.Align.END)
                 remove.set_valign(Gtk.Align.START)
                 remove.set_tooltip_text(f"Remove color {index}")
