@@ -215,14 +215,22 @@ class LightingKeyboard(Gtk.DrawingArea):
         scale = min(width / 184, height / 72)
         local_x = (x - (width - 184 * scale) / 2) / scale
         local_y = (y - (height - 72 * scale) / 2) / scale
-        for key_index, key_x, key_y, key_width, key_height in self._key_rectangles():
-            inside_x = key_x <= local_x <= key_x + key_width
-            inside_y = key_y <= local_y <= key_y + key_height
-            if inside_x and inside_y:
-                for zone in self.layout.zones:
-                    if key_index in zone.key_indices:
-                        self.zone_selected_callback(zone.firmware_id)
-                        return
+        if not 1 <= local_x <= 183 or not 1 <= local_y <= 71:
+            return
+
+        nearest_key = min(
+            self._key_rectangles(),
+            key=lambda rectangle: (
+                local_x - (rectangle[1] + rectangle[3] / 2)
+            ) ** 2
+            + (
+                local_y - (rectangle[2] + rectangle[4] / 2)
+            ) ** 2,
+        )[0]
+        for zone in self.layout.zones:
+            if nearest_key in zone.key_indices:
+                self.zone_selected_callback(zone.firmware_id)
+                return
 
     def _draw(self, _area, context, width, height):
         now = time.monotonic()
@@ -531,7 +539,10 @@ class MainWindow(Adw.ApplicationWindow):
         color_panel.append(self.keyboard_preview)
         if self.zone_demo:
             zone_note = Gtk.Label(
-                label="Synthetic four-zone layout · not a verified hardware map",
+                label=(
+                    "Click anywhere on the keyboard to select a zone · "
+                    "synthetic, unverified layout"
+                ),
                 xalign=0.5,
             )
             zone_note.add_css_class("dim-label")
