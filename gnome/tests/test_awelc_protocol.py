@@ -1,6 +1,7 @@
 import unittest
 
 from src.awelc_protocol import (
+    AnimationSeries,
     AnimationAction,
     AwElcProtocol,
     ProtocolError,
@@ -79,6 +80,41 @@ class ProtocolTest(unittest.TestCase):
     def test_validates_animation_action_fields(self):
         with self.assertRaisesRegex(ValueError, "duration"):
             AnimationAction(0, 0x10000, 1, (255, 0, 0))
+
+    def test_builds_multiple_zone_series_in_one_transaction(self):
+        commands = (0x22, 0x22, 0x23, 0x24, 0x23, 0x24, 0x22, 0x22)
+        replies = tuple(
+            bytes((3, command)).ljust(33, b"\0") for command in commands
+        )
+        transport = FakeTransport(replies)
+        red = AnimationAction(0, 500, 1, (255, 0, 0))
+        blue = AnimationAction(2, 800, 1, (0, 0, 255))
+
+        AwElcProtocol(transport).save_animation_series(
+            0x5C,
+            (
+                AnimationSeries((0, 1), (red,)),
+                AnimationSeries((2, 3), (blue,)),
+            ),
+        )
+
+        self.assertEqual(transport.reports[2][:7], bytes((3, 0x23, 1, 0, 2, 0, 1)))
+        self.assertEqual(transport.reports[4][:7], bytes((3, 0x23, 1, 0, 2, 2, 3)))
+        self.assertEqual(transport.reports[3][2:10], red.encode())
+        self.assertEqual(transport.reports[5][2:10], blue.encode())
+
+    def test_rejects_overlapping_zone_series_before_usb_exchange(self):
+        action = AnimationAction(0, 500, 1, (255, 0, 0))
+        transport = FakeTransport(())
+        with self.assertRaisesRegex(ValueError, "more than one series"):
+            AwElcProtocol(transport).save_animation_series(
+                0x5C,
+                (
+                    AnimationSeries((0, 1), (action,)),
+                    AnimationSeries((1, 2), (action,)),
+                ),
+            )
+        self.assertEqual(transport.reports, [])
 
     def test_builds_two_color_morph_actions(self):
         commands = (0x22, 0x22, 0x23, 0x24, 0x22, 0x22)

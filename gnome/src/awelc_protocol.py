@@ -41,6 +41,20 @@ class AnimationAction:
         )
 
 
+@dataclass(frozen=True)
+class AnimationSeries:
+    """One action sequence assigned to one or more firmware zones."""
+
+    zones: tuple[int, ...]
+    actions: tuple[AnimationAction, ...]
+    loop: bool = True
+
+    def __post_init__(self) -> None:
+        AwElcProtocol._validate_zones(self.zones)
+        if not self.actions:
+            raise ValueError("an animation series must contain at least one action")
+
+
 class ProtocolError(RuntimeError):
     pass
 
@@ -131,13 +145,32 @@ class AwElcProtocol:
         zones: tuple[int, ...],
     ) -> None:
         """Replace one animation slot with a looping action series."""
-        if not actions:
-            raise ValueError("an animation must contain at least one action")
+        self.save_animation_series(
+            animation_id,
+            (AnimationSeries(zones=zones, actions=actions),),
+        )
+
+    def save_animation_series(
+        self,
+        animation_id: int,
+        series: tuple[AnimationSeries, ...],
+    ) -> None:
+        """Replace one animation slot with one or more independent zone series."""
+        if not series:
+            raise ValueError("an animation must contain at least one series")
+        claimed_zones: set[int] = set()
+        for item in series:
+            overlap = claimed_zones.intersection(item.zones)
+            if overlap:
+                raise ValueError("a zone cannot appear in more than one series")
+            claimed_zones.update(item.zones)
+
         self.animation_command(0x04, animation_id)  # remove
         self.animation_command(0x01, animation_id)  # start new
-        self.start_series(zones)
-        for offset in range(0, len(actions), 3):
-            self.add_actions(actions[offset : offset + 3])
+        for item in series:
+            self.start_series(item.zones, loop=item.loop)
+            for offset in range(0, len(item.actions), 3):
+                self.add_actions(item.actions[offset : offset + 3])
         self.animation_command(0x02, animation_id)  # finish and save
         self.animation_command(0x06, animation_id)  # make default
 
