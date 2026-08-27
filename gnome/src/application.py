@@ -68,6 +68,23 @@ class MainWindow(Adw.ApplicationWindow):
         self.enabled.set_active(self.backend.settings.enabled)
         lighting_group.add(self.enabled)
 
+        self.effects = [LightingEffect.STATIC]
+        if LightingEffect.MORPH in self.backend.capabilities.effects:
+            self.effects.append(LightingEffect.MORPH)
+        self.effect = Gtk.DropDown.new_from_strings(
+            ["Static" if effect is LightingEffect.STATIC else "Morph" for effect in self.effects]
+        )
+        try:
+            selected_effect = self.effects.index(self.backend.settings.effect)
+        except ValueError:
+            selected_effect = 0
+        self.effect.set_selected(selected_effect)
+        self.effect.connect("notify::selected", self._effect_changed)
+        effect_row = Adw.ActionRow(title="Effect", subtitle="Static color or smooth morph")
+        effect_row.add_suffix(self.effect)
+        effect_row.set_activatable_widget(self.effect)
+        lighting_group.add(effect_row)
+
         self.color = Gtk.ColorDialogButton(dialog=Gtk.ColorDialog(title="Keyboard color"))
         rgba = Gdk.RGBA()
         red, green, blue = self.backend.settings.primary_color
@@ -82,6 +99,38 @@ class MainWindow(Adw.ApplicationWindow):
         color_row.add_suffix(self.color)
         color_row.set_activatable_widget(self.color)
         lighting_group.add(color_row)
+
+        self.secondary_color = Gtk.ColorDialogButton(
+            dialog=Gtk.ColorDialog(title="Second keyboard color")
+        )
+        secondary = self.backend.settings.secondary_color or (0, 0, 255)
+        secondary_rgba = Gdk.RGBA()
+        secondary_rgba.red, secondary_rgba.green, secondary_rgba.blue = (
+            channel / 255 for channel in secondary
+        )
+        secondary_rgba.alpha = 1.0
+        self.secondary_color.set_rgba(secondary_rgba)
+        self.secondary_color_row = Adw.ActionRow(
+            title="Second color", subtitle="Alternate morph target"
+        )
+        self.secondary_color_row.add_suffix(self.secondary_color)
+        self.secondary_color_row.set_activatable_widget(self.secondary_color)
+        lighting_group.add(self.secondary_color_row)
+
+        self.duration = Gtk.Scale.new_with_range(
+            Gtk.Orientation.HORIZONTAL, 4, 4095, 1
+        )
+        self.duration.set_value(self.backend.settings.duration or 500)
+        self.duration.set_size_request(220, -1)
+        self.duration.set_hexpand(True)
+        self.duration.set_draw_value(True)
+        self.duration.set_value_pos(Gtk.PositionType.RIGHT)
+        self.duration_row = Adw.ActionRow(
+            title="Morph duration", subtitle="Firmware transition duration"
+        )
+        self.duration_row.add_suffix(self.duration)
+        lighting_group.add(self.duration_row)
+        self._effect_changed()
 
         self.brightness = Gtk.Scale.new_with_range(
             Gtk.Orientation.HORIZONTAL, 0, 100, 1
@@ -138,13 +187,36 @@ class MainWindow(Adw.ApplicationWindow):
         color = tuple(
             round(channel * 255) for channel in (rgba.red, rgba.green, rgba.blue)
         )
+        selected_effect = self.effects[self.effect.get_selected()]
+        secondary_rgba = self.secondary_color.get_rgba()
+        secondary_color = tuple(
+            round(channel * 255)
+            for channel in (
+                secondary_rgba.red,
+                secondary_rgba.green,
+                secondary_rgba.blue,
+            )
+        )
         settings = LightingSettings(
             enabled=self.enabled.get_active(),
-            effect=LightingEffect.STATIC,
+            effect=selected_effect,
             primary_color=color,
             brightness=round(self.brightness.get_value()),
+            secondary_color=(
+                secondary_color if selected_effect is LightingEffect.MORPH else None
+            ),
+            duration=(
+                round(self.duration.get_value())
+                if selected_effect is LightingEffect.MORPH
+                else None
+            ),
         )
         self.backend.apply_lighting(settings)
         if self.settings_store is not None:
             self.settings_store.save(settings)
         self.toast_overlay.add_toast(Adw.Toast(title="Lighting settings applied"))
+
+    def _effect_changed(self, *_args):
+        is_morph = self.effects[self.effect.get_selected()] is LightingEffect.MORPH
+        self.secondary_color_row.set_visible(is_morph)
+        self.duration_row.set_visible(is_morph)

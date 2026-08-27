@@ -25,6 +25,20 @@ class LightingSettingsStoreTest(unittest.TestCase):
             path.write_text("not json", encoding="utf-8")
             self.assertIsNone(LightingSettingsStore(path).load())
 
+    def test_round_trips_morph_settings(self):
+        settings = LightingSettings(
+            enabled=True,
+            effect=LightingEffect.MORPH,
+            primary_color=(255, 0, 0),
+            secondary_color=(0, 0, 255),
+            duration=750,
+            brightness=80,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            store = LightingSettingsStore(Path(directory) / "settings.json")
+            store.save(settings)
+            self.assertEqual(store.load(), settings)
+
 
 if __name__ == "__main__":
     unittest.main()

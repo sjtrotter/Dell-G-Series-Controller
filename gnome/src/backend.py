@@ -145,7 +145,7 @@ class AwElcBackend:
             zones=zone_count,
         )
         self._capabilities = LightingCapabilities(
-            effects=frozenset({LightingEffect.STATIC}),
+            effects=frozenset({LightingEffect.STATIC, LightingEffect.MORPH}),
             brightness=True,
             persistent_power_states=True,
             zone_count=zone_count,
@@ -185,7 +185,16 @@ class AwElcBackend:
 
         color = settings.primary_color if settings.enabled else (0, 0, 0)
         for animation_id in (AC_CHARGED, AC_CHARGING, DC_ON):
-            self._protocol.save_static_animation(animation_id, color, self._zones)
+            if settings.enabled and settings.effect is LightingEffect.MORPH:
+                self._protocol.save_morph_animation(
+                    animation_id,
+                    settings.primary_color,
+                    settings.secondary_color,
+                    self._zones,
+                    settings.duration,
+                )
+            else:
+                self._protocol.save_static_animation(animation_id, color, self._zones)
         # AW-ELC dimness is inverse: zero is full brightness.
         self._protocol.set_dimness(100 - settings.brightness, self._zones)
         self._settings = settings

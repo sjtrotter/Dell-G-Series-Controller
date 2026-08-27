@@ -22,6 +22,20 @@ class FakeProtocol:
     def save_static_animation(self, animation_id, color, zones):
         self.calls.append(("save-static", animation_id, color, zones))
 
+    def save_morph_animation(
+        self, animation_id, primary_color, secondary_color, zones, duration
+    ):
+        self.calls.append(
+            (
+                "save-morph",
+                animation_id,
+                primary_color,
+                secondary_color,
+                zones,
+                duration,
+            )
+        )
+
 
 class LightingSettingsTest(unittest.TestCase):
     def test_valid_static_settings(self):
@@ -71,7 +85,10 @@ class AwElcBackendTest(unittest.TestCase):
         self.assertEqual(backend.info.firmware, "1.1.7")
         self.assertEqual(backend.info.platform, "0x0e09")
         self.assertEqual(backend.info.zones, 1)
-        self.assertEqual(backend.capabilities.effects, {LightingEffect.STATIC})
+        self.assertEqual(
+            backend.capabilities.effects,
+            {LightingEffect.STATIC, LightingEffect.MORPH},
+        )
         self.assertTrue(backend.capabilities.persistent_power_states)
 
     def test_applies_static_color_and_inverse_dimness(self):
@@ -114,6 +131,29 @@ class AwElcBackendTest(unittest.TestCase):
                 ("dimness", 25, (0,)),
             ],
         )
+
+    def test_applies_two_color_morph_to_awake_power_states(self):
+        protocol = FakeProtocol()
+        backend = AwElcBackend(protocol)
+        backend.apply_lighting(
+            LightingSettings(
+                enabled=True,
+                effect=LightingEffect.MORPH,
+                primary_color=(255, 0, 0),
+                secondary_color=(0, 0, 255),
+                duration=500,
+                brightness=80,
+            )
+        )
+        self.assertEqual(
+            protocol.calls[:3],
+            [
+                ("save-morph", 0x5C, (255, 0, 0), (0, 0, 255), (0,), 500),
+                ("save-morph", 0x5D, (255, 0, 0), (0, 0, 255), (0,), 500),
+                ("save-morph", 0x5F, (255, 0, 0), (0, 0, 255), (0,), 500),
+            ],
+        )
+        self.assertEqual(protocol.calls[3], ("dimness", 20, (0,)))
 
 
 if __name__ == "__main__":

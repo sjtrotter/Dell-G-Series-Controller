@@ -121,6 +121,23 @@ class AwElcProtocol:
             raise ValueError("an action report must contain between one and three actions")
         self.exchange(0x24, b"".join(action.encode() for action in actions))
 
+    def save_animation(
+        self,
+        animation_id: int,
+        actions: tuple[AnimationAction, ...],
+        zones: tuple[int, ...],
+    ) -> None:
+        """Replace one animation slot with a looping action series."""
+        if not actions:
+            raise ValueError("an animation must contain at least one action")
+        self.animation_command(0x04, animation_id)  # remove
+        self.animation_command(0x01, animation_id)  # start new
+        self.start_series(zones)
+        for offset in range(0, len(actions), 3):
+            self.add_actions(actions[offset : offset + 3])
+        self.animation_command(0x02, animation_id)  # finish and save
+        self.animation_command(0x06, animation_id)  # make default
+
     def save_static_animation(
         self,
         animation_id: int,
@@ -131,12 +148,23 @@ class AwElcProtocol:
     ) -> None:
         """Replace one animation slot with a looping static-color series."""
         action = AnimationAction(0, duration, tempo, color)
-        self.animation_command(0x04, animation_id)  # remove
-        self.animation_command(0x01, animation_id)  # start new
-        self.start_series(zones)
-        self.add_actions((action,))
-        self.animation_command(0x02, animation_id)  # finish and save
-        self.animation_command(0x06, animation_id)  # make default
+        self.save_animation(animation_id, (action,), zones)
+
+    def save_morph_animation(
+        self,
+        animation_id: int,
+        primary_color: tuple[int, int, int],
+        secondary_color: tuple[int, int, int],
+        zones: tuple[int, ...],
+        duration: int,
+        tempo: int = 1,
+    ) -> None:
+        """Replace one slot with a looping two-color morph animation."""
+        actions = (
+            AnimationAction(2, duration, tempo, primary_color),
+            AnimationAction(2, duration, tempo, secondary_color),
+        )
+        self.save_animation(animation_id, actions, zones)
 
     @staticmethod
     def _zone_payload(prefix: bytes, zones: tuple[int, ...]) -> bytes:

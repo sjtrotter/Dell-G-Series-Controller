@@ -24,6 +24,14 @@ class LightingSettingsStore:
                 effect=LightingEffect(data["effect"]),
                 primary_color=tuple(data["primary_color"]),
                 brightness=int(data["brightness"]),
+                secondary_color=(
+                    tuple(data["secondary_color"])
+                    if data.get("secondary_color") is not None
+                    else None
+                ),
+                duration=(
+                    int(data["duration"]) if data.get("duration") is not None else None
+                ),
             )
         except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
             return None
@@ -38,6 +46,12 @@ class LightingSettingsStore:
                     "effect": settings.effect.value,
                     "primary_color": list(settings.primary_color),
                     "brightness": settings.brightness,
+                    "secondary_color": (
+                        list(settings.secondary_color)
+                        if settings.secondary_color is not None
+                        else None
+                    ),
+                    "duration": settings.duration,
                 },
                 indent=2,
             )
