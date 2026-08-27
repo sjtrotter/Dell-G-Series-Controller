@@ -36,23 +36,25 @@ class ProtocolTest(unittest.TestCase):
             transport.reports[0][:8], bytes((3, 0x27, 255, 0, 0, 0, 1, 0))
         )
 
-    def test_reads_animation_directory_using_dell_layout(self):
-        count_reply = bytes((3, 0x20, 3, 0, 1, 0x81)).ljust(33, b"\0")
+    def test_reads_animation_directory_using_observed_layout(self):
+        count_reply = bytes((3, 0x20, 3, 0, 1, 0, 0x81)).ljust(33, b"\0")
         entry_reply = bytes((3, 0x20, 4, 0, 0x81, 0)).ljust(33, b"\0")
         transport = FakeTransport((count_reply, entry_reply))
         protocol = AwElcProtocol(transport)
 
-        self.assertEqual(protocol.get_animation_count(), (1, 0x81))
-        animation_id, is_custom, raw = protocol.get_animation_by_index(0)
+        count, animation_ids, directory_raw = protocol.get_animation_directory()
+        self.assertEqual((count, animation_ids), (1, (0x81,)))
+        self.assertEqual(directory_raw, count_reply)
+        animation_id, is_custom, raw = protocol.get_animation_by_id(0x81)
         self.assertEqual((animation_id, is_custom), (0x81, True))
         self.assertEqual(raw, entry_reply)
         self.assertEqual(transport.reports[0][:3], bytes((3, 0x20, 3)))
-        self.assertEqual(transport.reports[1][:4], bytes((3, 0x20, 4, 0)))
+        self.assertEqual(transport.reports[1][:4], bytes((3, 0x20, 4, 0x81)))
 
-    def test_rejects_animation_index_outside_protocol_range(self):
+    def test_rejects_animation_id_outside_protocol_range(self):
         protocol = AwElcProtocol(FakeTransport(()))
         with self.assertRaisesRegex(ValueError, "fit in one byte"):
-            protocol.get_animation_by_index(256)
+            protocol.get_animation_by_id(256)
 
     def test_rejects_mismatched_reply(self):
         reply = bytes((3, 0x26)).ljust(33, b"\0")

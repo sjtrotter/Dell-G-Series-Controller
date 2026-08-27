@@ -14,15 +14,21 @@ def main() -> int:
         protocol = AwElcProtocol(HidrawReportTransport.discover())
         version = protocol.get_version()
         platform, zones = protocol.get_platform()
-        count, maximum_id = protocol.get_animation_count()
+        count, animation_ids, directory_raw = protocol.get_animation_directory()
         print(f"firmware: {'.'.join(map(str, version))}")
         print(f"platform: 0x{platform:04x}; zones: {zones}")
-        print(f"stored animations: {count}; maximum ID: 0x{maximum_id:02x}")
-        for index in range(count):
-            animation_id, is_custom, raw = protocol.get_animation_by_index(index)
+        print(f"stored animations: {count}")
+        print(f"directory raw: {format_report(directory_raw)}")
+        print(
+            "advertised IDs: "
+            + (", ".join(f"0x{value:04x}" for value in animation_ids) or "none")
+        )
+        for requested_id in animation_ids:
+            animation_id, is_custom, raw = protocol.get_animation_by_id(requested_id)
             kind = "custom" if is_custom else "predefined"
             print(
-                f"animation[{index}]: ID 0x{animation_id:04x}; {kind}; "
+                f"animation[0x{requested_id:04x}]: returned ID "
+                f"0x{animation_id:04x}; {kind}; "
                 f"raw: {format_report(raw)}"
             )
     except (DeviceAccessError, DeviceNotFoundError) as error:

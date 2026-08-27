@@ -46,20 +46,26 @@ class AwElcProtocol:
             raise ProtocolError("AW-ELC reported zero lighting zones")
         return platform, zone_count
 
-    def get_animation_count(self) -> tuple[int, int]:
-        """Return the stored animation count and firmware's maximum ID."""
+    def get_animation_directory(self) -> tuple[int, tuple[int, ...], bytes]:
+        """Return the animation count, advertised IDs, and unmodified reply."""
         reply = self.exchange(0x20, bytes((0x03,)))
         count = int.from_bytes(reply[3:5], byteorder="big")
-        return count, reply[5]
+        available_entries = (len(reply) - 5) // 2
+        parsed_entries = min(count, available_entries)
+        animation_ids = tuple(
+            int.from_bytes(reply[5 + offset : 7 + offset], byteorder="big")
+            for offset in range(0, parsed_entries * 2, 2)
+        )
+        return count, animation_ids, reply
 
-    def get_animation_by_index(self, index: int) -> tuple[int, bool, bytes]:
-        """Read one stored animation directory entry without changing it."""
-        if not 0 <= index <= 0xFF:
-            raise ValueError("animation index must fit in one byte")
-        reply = self.exchange(0x20, bytes((0x04, index)))
-        animation_id = int.from_bytes(reply[3:5], byteorder="big")
+    def get_animation_by_id(self, animation_id: int) -> tuple[int, bool, bytes]:
+        """Read one advertised animation ID without changing it."""
+        if not 0 <= animation_id <= 0xFF:
+            raise ValueError("animation ID must fit in one byte")
+        reply = self.exchange(0x20, bytes((0x04, animation_id)))
+        returned_id = int.from_bytes(reply[3:5], byteorder="big")
         is_custom = reply[5] == 0
-        return animation_id, is_custom, reply
+        return returned_id, is_custom, reply
 
     def set_dimness(self, dimness: int, zones: tuple[int, ...]) -> None:
         if not 0 <= dimness <= 100:
