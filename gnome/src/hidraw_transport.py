@@ -74,7 +74,10 @@ class HidrawReportTransport:
                 return bytes(reply)
         except OSError as error:
             if error.errno in (13,):
-                detail = "access denied; install the included udev rule"
+                detail = (
+                    "access denied; grant this user read/write access to the "
+                    "supported hidraw node (the included udev rule is optional)"
+                )
             else:
                 detail = os.strerror(error.errno) if error.errno else str(error)
             raise DeviceAccessError(

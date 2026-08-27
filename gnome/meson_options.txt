@@ -1,0 +1,13 @@
+option(
+  'install_udev_rule',
+  type: 'boolean',
+  value: true,
+  description: 'Install the optional udev/eudev hidraw access rule',
+)
+
+option(
+  'install_systemd_user_unit',
+  type: 'boolean',
+  value: true,
+  description: 'Install the optional systemd user brightness service',
+)

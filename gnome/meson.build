@@ -60,15 +60,19 @@ install_data(
   ),
 )
 
-install_data(
-  'data/dell-g-series-controller-brightness.service',
-  install_dir: join_paths(get_option('prefix'), 'lib', 'systemd', 'user'),
-)
+if get_option('install_systemd_user_unit')
+  install_data(
+    'data/dell-g-series-controller-brightness.service',
+    install_dir: join_paths(get_option('prefix'), 'lib', 'systemd', 'user'),
+  )
+endif
 
-install_data(
-  'data/70-dell-g-series-controller.rules',
-  install_dir: join_paths(get_option('prefix'), 'lib', 'udev', 'rules.d'),
-)
+if get_option('install_udev_rule')
+  install_data(
+    'data/70-dell-g-series-controller.rules',
+    install_dir: join_paths(get_option('prefix'), 'lib', 'udev', 'rules.d'),
+  )
+endif
 
 test(
   'python unit tests',

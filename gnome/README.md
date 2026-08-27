@@ -82,7 +82,8 @@ python3 gnome/main.py --hardware
 
 Hardware mode does not invoke `sudo`, reset the USB device, or detach its
 kernel driver. The USB device must be accessible to the current user; the
-packaged application includes a narrowly scoped udev rule.
+packaged application can include a narrowly scoped udev rule. Neither udev nor
+systemd is a runtime dependency of the application.
 
 Inspect kernel-provided fan, temperature, and platform-profile support without
 making hardware changes:
@@ -216,6 +217,46 @@ sudo udevadm trigger --subsystem-match=hidraw
 
 The rule uses systemd-logind's `uaccess` tag, granting access only to the
 active local session rather than making the controller globally writable.
+
+### Systems without udev or systemd
+
+The controller backend opens `/dev/hidraw*` directly and identifies candidates
+through `/sys/class/hidraw/*/device/uevent`. A system using eudev or another
+udev-compatible manager can use the included rule when its seat/ACL integration
+implements the `uaccess` tag. Other device managers must grant the logged-in
+user read/write access to only the hidraw node whose `HID_ID` is one of:
+
+```text
+0003:0000187C:00000550
+0003:0000187C:00000551
+```
+
+For a temporary test, an administrator can identify the matching node under
+`/sys/class/hidraw`, then grant an ACL with:
+
+```sh
+sudo setfacl -m "u:$USER:rw" /dev/hidrawN
+```
+
+That ACL normally disappears when the device is re-enumerated. A persistent
+mdev/devtmpfs setup should apply an equivalent owner, group, or ACL rule during
+device creation. Do not run the graphical application as root and do not make
+every hidraw node world-writable.
+
+The exact-brightness helper is an ordinary foreground process and can be run
+under any user service supervisor:
+
+```sh
+python3 gnome/service.py --verbose
+```
+
+Packagers can omit both integration files:
+
+```sh
+meson setup gnome/_build gnome \
+  -Dinstall_udev_rule=false \
+  -Dinstall_systemd_user_unit=false
+```
 
 The service rediscovers the hidraw device after temporary access failures,
 USB re-enumeration, and suspend/resume. Brightness persistence is currently
