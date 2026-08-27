@@ -24,8 +24,9 @@ and battery-on animation slots. Sleep and low-battery animations are left
 unchanged.
 
 Verified effects on AW-ELC firmware 1.1.7 are static color, a two-color smooth
-morph, and the firmware's pulse effect. Pulse is presented as a blink because
-the controller changes abruptly between the selected color and black.
+morph, and the firmware's pulse effect. Pulse is presented as Flash: it uses
+one color, with duration controlling the action cycle and tempo controlling
+the flash rate.
 
 For development, install the included device-access rule and reload udev:
 

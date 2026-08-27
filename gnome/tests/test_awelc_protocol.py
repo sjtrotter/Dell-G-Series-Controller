@@ -116,7 +116,7 @@ class ProtocolTest(unittest.TestCase):
             ),
         )
 
-    def test_builds_color_and_black_pulse_actions(self):
+    def test_builds_single_color_pulse_action(self):
         commands = (0x22, 0x22, 0x23, 0x24, 0x22, 0x22)
         replies = tuple(bytes((3, command)).ljust(33, b"\0") for command in commands)
         transport = FakeTransport(replies)
@@ -126,29 +126,8 @@ class ProtocolTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            transport.reports[3][:18],
-            bytes(
-                (
-                    3,
-                    0x24,
-                    1,
-                    0x02,
-                    0x58,
-                    0,
-                    1,
-                    0,
-                    255,
-                    0,
-                    1,
-                    0x02,
-                    0x58,
-                    0,
-                    1,
-                    0,
-                    0,
-                    0,
-                )
-            ),
+            transport.reports[3][:10],
+            bytes((3, 0x24, 1, 0x02, 0x58, 0, 1, 0, 255, 0)),
         )
 
 

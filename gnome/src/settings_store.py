@@ -32,6 +32,7 @@ class LightingSettingsStore:
                 duration=(
                     int(data["duration"]) if data.get("duration") is not None else None
                 ),
+                tempo=(int(data["tempo"]) if data.get("tempo") is not None else None),
             )
         except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
             return None
@@ -52,6 +53,7 @@ class LightingSettingsStore:
                         else None
                     ),
                     "duration": settings.duration,
+                    "tempo": settings.tempo,
                 },
                 indent=2,
             )

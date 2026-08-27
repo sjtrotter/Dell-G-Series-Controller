@@ -77,7 +77,7 @@ class MainWindow(Adw.ApplicationWindow):
             [
                 {
                     LightingEffect.STATIC: "Static",
-                    LightingEffect.PULSE: "Blink (firmware Pulse)",
+                    LightingEffect.PULSE: "Flash (firmware Pulse)",
                     LightingEffect.MORPH: "Morph",
                 }[effect]
                 for effect in self.effects
@@ -90,7 +90,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.effect.set_selected(selected_effect)
         self.effect.connect("notify::selected", self._effect_changed)
         effect_row = Adw.ActionRow(
-            title="Effect", subtitle="Static, blinking pulse, or smooth morph"
+            title="Effect", subtitle="Static, flashing pulse, or smooth morph"
         )
         effect_row.add_suffix(self.effect)
         effect_row.set_activatable_widget(self.effect)
@@ -141,6 +141,18 @@ class MainWindow(Adw.ApplicationWindow):
         )
         self.duration_row.add_suffix(self.duration)
         lighting_group.add(self.duration_row)
+
+        self.tempo = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 1, 255, 1)
+        self.tempo.set_value(self.backend.settings.tempo or 100)
+        self.tempo.set_size_request(220, -1)
+        self.tempo.set_hexpand(True)
+        self.tempo.set_draw_value(True)
+        self.tempo.set_value_pos(Gtk.PositionType.RIGHT)
+        self.tempo_row = Adw.ActionRow(
+            title="Flash tempo", subtitle="Pulse flash rate"
+        )
+        self.tempo_row.add_suffix(self.tempo)
+        lighting_group.add(self.tempo_row)
         self._effect_changed()
 
         self.brightness = Gtk.Scale.new_with_range(
@@ -221,6 +233,11 @@ class MainWindow(Adw.ApplicationWindow):
                 if selected_effect in {LightingEffect.PULSE, LightingEffect.MORPH}
                 else None
             ),
+            tempo=(
+                round(self.tempo.get_value())
+                if selected_effect is LightingEffect.PULSE
+                else None
+            ),
         )
         self.backend.apply_lighting(settings)
         if self.settings_store is not None:
@@ -235,3 +252,6 @@ class MainWindow(Adw.ApplicationWindow):
         }
         self.secondary_color_row.set_visible(is_morph)
         self.duration_row.set_visible(is_animated)
+        self.tempo_row.set_visible(
+            self.effects[self.effect.get_selected()] is LightingEffect.PULSE
+        )

@@ -45,6 +45,7 @@ class LightingSettingsStoreTest(unittest.TestCase):
             effect=LightingEffect.PULSE,
             primary_color=(0, 255, 0),
             duration=600,
+            tempo=100,
             brightness=90,
         )
         with tempfile.TemporaryDirectory() as directory:

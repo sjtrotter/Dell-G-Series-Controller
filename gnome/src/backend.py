@@ -45,6 +45,7 @@ class LightingSettings:
     brightness: int
     secondary_color: RgbColor | None = None
     duration: int | None = None
+    tempo: int | None = None
 
     def __post_init__(self) -> None:
         self._validate_color("primary_color", self.primary_color)
@@ -58,6 +59,9 @@ class LightingSettings:
         if self.effect in {LightingEffect.PULSE, LightingEffect.MORPH}:
             if self.duration is None or self.duration < 1:
                 raise ValueError("animated effects require a positive duration")
+        if self.effect is LightingEffect.PULSE:
+            if self.tempo is None or not 1 <= self.tempo <= 255:
+                raise ValueError("pulse effects require a tempo between 1 and 255")
 
     @staticmethod
     def _validate_color(name: str, color: RgbColor) -> None:
@@ -204,6 +208,7 @@ class AwElcBackend:
                     settings.primary_color,
                     self._zones,
                     settings.duration,
+                    settings.tempo,
                 )
             else:
                 self._protocol.save_static_animation(animation_id, color, self._zones)
