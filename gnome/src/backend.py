@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Protocol, TypeAlias
 
 from .awelc_protocol import AwElcProtocol
-from .usb_transport import UsbReportTransport
+from .hidraw_transport import HidrawReportTransport
 
 
 RgbColor: TypeAlias = tuple[int, int, int]
@@ -155,7 +155,7 @@ class AwElcBackend:
 
     @classmethod
     def discover(cls) -> "AwElcBackend":
-        return cls(AwElcProtocol(UsbReportTransport.discover()))
+        return cls(AwElcProtocol(HidrawReportTransport.discover()))
 
     @property
     def info(self) -> DeviceInfo:
