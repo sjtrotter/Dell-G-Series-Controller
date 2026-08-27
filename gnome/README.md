@@ -76,6 +76,10 @@ journal and can be inspected with:
 journalctl --user -u dell-g-series-controller-brightness.service
 ```
 
+The foreground and systemd launch paths share a per-user runtime lock. The
+interface uses that lock to report whether exact brightness is active, and a
+second service instance is rejected before it can compete for the controller.
+
 The packaged service unit is
 `dell-g-series-controller-brightness.service`. After its executable and unit
 are installed, enable it with:

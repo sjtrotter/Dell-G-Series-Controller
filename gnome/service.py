@@ -12,6 +12,7 @@ from src.awelc_protocol import AwElcProtocol
 from src.backend import BrightnessMode, PowerState
 from src.hidraw_transport import HidrawReportTransport
 from src.settings_store import LightingSettingsStore
+from src.service_status import acquire_service_lock
 from src.usb_transport import DeviceAccessError, DeviceNotFoundError
 
 
@@ -97,6 +98,11 @@ def main() -> int:
     if args.interval <= 0:
         parser.error("--interval must be positive")
 
+    try:
+        service_lock = acquire_service_lock()
+    except RuntimeError as error:
+        parser.error(str(error))
+
     service = BrightnessService(
         LightingSettingsStore(), Path("/sys/class/power_supply")
     )
@@ -136,6 +142,7 @@ def main() -> int:
         if args.once:
             break
         time.sleep(args.interval)
+    service_lock.close()
     return 0
 
 

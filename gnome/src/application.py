@@ -3,9 +3,10 @@ import gi
 gi.require_version("Adw", "1")
 gi.require_version("Gtk", "4.0")
 
-from gi.repository import Adw, Gdk, Gtk
+from gi.repository import Adw, Gdk, GLib, Gtk
 
 from .backend import BrightnessMode, LightingEffect, LightingSettings, PowerState
+from .service_status import service_is_running
 
 
 class Application(Adw.Application):
@@ -92,13 +93,19 @@ class MainWindow(Adw.ApplicationWindow):
         self.brightness_method.set_selected(
             self.brightness_modes.index(self.brightness_mode)
         )
-        brightness_method_row = Adw.ActionRow(
+        self.brightness_method_row = Adw.ActionRow(
             title="Profile brightness",
-            subtitle="Hardware-only works without login; exact mode requires the user service",
         )
-        brightness_method_row.add_suffix(self.brightness_method)
-        brightness_method_row.set_activatable_widget(self.brightness_method)
-        lighting_group.add(brightness_method_row)
+        self.brightness_method_row.add_suffix(self.brightness_method)
+        self.brightness_method_row.set_activatable_widget(self.brightness_method)
+        lighting_group.add(self.brightness_method_row)
+        self.brightness_method.connect(
+            "notify::selected", self._brightness_method_changed
+        )
+        self._refresh_service_status()
+        self._service_status_timer = GLib.timeout_add_seconds(
+            2, self._refresh_service_status
+        )
 
         self.enabled = Adw.SwitchRow(title="Lighting enabled")
         self.enabled.set_active(self.backend.settings.enabled)
@@ -297,6 +304,23 @@ class MainWindow(Adw.ApplicationWindow):
         self.tempo_row.set_visible(
             self.effects[self.effect.get_selected()] is LightingEffect.PULSE
         )
+
+    def _brightness_method_changed(self, *_args):
+        self._refresh_service_status()
+
+    def _refresh_service_status(self):
+        exact = (
+            self.brightness_modes[self.brightness_method.get_selected()]
+            is BrightnessMode.EXACT_SERVICE
+        )
+        if not exact:
+            subtitle = "Stored in hardware; works without a user service"
+        elif service_is_running():
+            subtitle = "Exact brightness service is running"
+        else:
+            subtitle = "Exact brightness service is not running"
+        self.brightness_method_row.set_subtitle(subtitle)
+        return GLib.SOURCE_CONTINUE
 
     def _power_state_changed(self, *_args):
         state = self.power_states[self.power_state.get_selected()]
