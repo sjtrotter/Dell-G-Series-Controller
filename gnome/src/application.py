@@ -107,16 +107,61 @@ class LoadingWindow(Adw.ApplicationWindow):
         self.set_default_size(460, 300)
         toolbar_view = Adw.ToolbarView()
         toolbar_view.add_top_bar(Adw.HeaderBar())
-        status = Adw.StatusPage(
-            title="Connecting to keyboard",
-            description="Waiting for the Alienware AW-ELC controller",
-            icon_name="input-keyboard-symbolic",
-        )
+        status = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        status.set_halign(Gtk.Align.CENTER)
+        status.set_valign(Gtk.Align.CENTER)
+        status.append(AlienMark())
+        keyboard = Gtk.Image.new_from_icon_name("input-keyboard-symbolic")
+        keyboard.set_pixel_size(44)
+        status.append(keyboard)
+        title = Gtk.Label(label="Connecting to keyboard")
+        title.add_css_class("title-1")
+        status.append(title)
+        description = Gtk.Label(label="Waiting for the Alienware AW-ELC controller")
+        description.add_css_class("dim-label")
+        status.append(description)
         spinner = Adw.Spinner()
         spinner.set_size_request(32, 32)
-        status.set_child(spinner)
+        spinner.set_halign(Gtk.Align.CENTER)
+        status.append(spinner)
         toolbar_view.set_content(status)
         self.set_content(toolbar_view)
+
+
+class AlienMark(Gtk.DrawingArea):
+    """Small original monochrome alien motif for the connection screen."""
+
+    def __init__(self):
+        super().__init__()
+        self.set_content_width(104)
+        self.set_content_height(82)
+        self.set_draw_func(self._draw)
+
+    @staticmethod
+    def _draw(_area, context, width, height):
+        context.save()
+        context.translate(width / 2, height / 2)
+        context.scale(width / 104, height / 82)
+
+        context.set_source_rgba(1, 1, 1, 0.96)
+        context.move_to(0, -36)
+        context.curve_to(-34, -34, -46, -13, -35, 12)
+        context.curve_to(-27, 30, -11, 39, 0, 40)
+        context.curve_to(11, 39, 27, 30, 35, 12)
+        context.curve_to(46, -13, 34, -34, 0, -36)
+        context.close_path()
+        context.fill()
+
+        context.set_source_rgba(0.08, 0.09, 0.11, 1)
+        for x in (-17, 17):
+            context.save()
+            context.translate(x, 2)
+            context.rotate(-0.22 if x < 0 else 0.22)
+            context.scale(1.0, 1.65)
+            context.arc(0, 0, 7, 0, 6.283185307)
+            context.fill()
+            context.restore()
+        context.restore()
 
 
 class MainWindow(Adw.ApplicationWindow):
