@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Protocol, TypeAlias
 
-from .awelc_protocol import AwElcProtocol
+from .awelc_protocol import AC_CHARGED, AC_CHARGING, DC_ON, AwElcProtocol
 from .hidraw_transport import HidrawReportTransport
 
 
@@ -125,7 +125,7 @@ class DemoBackend:
 
 
 class AwElcBackend:
-    """Hardware backend limited to verified volatile AW-ELC commands."""
+    """Hardware backend using verified persistent AW-ELC commands."""
 
     def __init__(self, protocol: AwElcProtocol, name: str = "Dell G Series laptop"):
         self._protocol = protocol
@@ -142,10 +142,10 @@ class AwElcBackend:
         self._capabilities = LightingCapabilities(
             effects=frozenset({LightingEffect.STATIC}),
             brightness=True,
-            persistent_power_states=False,
+            persistent_power_states=True,
             zone_count=zone_count,
         )
-        # The volatile protocol cannot query the currently displayed color.
+        # Firmware 1.1.7 cannot read back the stored animation contents.
         self._settings = LightingSettings(
             enabled=False,
             effect=LightingEffect.STATIC,
@@ -173,10 +173,9 @@ class AwElcBackend:
         if settings.effect not in self.capabilities.effects:
             raise ValueError(f"unsupported lighting effect: {settings.effect.value}")
 
-        if settings.enabled:
-            # AW-ELC dimness is inverse: zero is full brightness.
-            self._protocol.set_dimness(100 - settings.brightness, self._zones)
-            self._protocol.set_color(settings.primary_color, self._zones)
-        else:
-            self._protocol.set_color((0, 0, 0), self._zones)
+        color = settings.primary_color if settings.enabled else (0, 0, 0)
+        for animation_id in (AC_CHARGED, AC_CHARGING, DC_ON):
+            self._protocol.save_static_animation(animation_id, color, self._zones)
+        # AW-ELC dimness is inverse: zero is full brightness.
+        self._protocol.set_dimness(100 - settings.brightness, self._zones)
         self._settings = settings

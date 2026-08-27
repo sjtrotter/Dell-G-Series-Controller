@@ -53,7 +53,9 @@ class MainWindow(Adw.ApplicationWindow):
 
         lighting_group = Adw.PreferencesGroup(title="Keyboard lighting")
         if self.backend.capabilities.persistent_power_states:
-            lighting_group.set_description("Changes remain in memory in demo mode.")
+            lighting_group.set_description(
+                "Applied changes persist across lighting timeouts and power states."
+            )
         else:
             lighting_group.set_description(
                 "Static changes are sent directly to the connected controller."
@@ -88,7 +90,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         apply_row = Adw.ActionRow(
             title="Apply lighting",
-            subtitle="Send the selected color and brightness",
+            subtitle="Save the selected color and brightness to the controller",
         )
         apply_button = Gtk.Button(label="Apply")
         apply_button.add_css_class("suggested-action")

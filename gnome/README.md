@@ -10,7 +10,7 @@ Run the interface without accessing hardware:
 python3 gnome/main.py --demo
 ```
 
-Connect to an AW-ELC controller using the tested static-color backend:
+Connect to an AW-ELC controller using the tested persistent static-color backend:
 
 ```sh
 python3 gnome/main.py --hardware
@@ -19,6 +19,9 @@ python3 gnome/main.py --hardware
 Hardware mode does not invoke `sudo`, reset the USB device, or detach its
 kernel driver. The USB device must be accessible to the current user; a
 narrowly scoped udev rule will be provided with the packaged application.
+The Apply button writes the selected static color to the AC-charged,
+AC-charging, and battery-on animation slots. Sleep and low-battery animations
+are left unchanged.
 
 For development, install the included device-access rule and reload udev:
 

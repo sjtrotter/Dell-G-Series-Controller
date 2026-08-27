@@ -19,6 +19,9 @@ class FakeProtocol:
     def set_color(self, color, zones):
         self.calls.append(("color", color, zones))
 
+    def save_static_animation(self, animation_id, color, zones):
+        self.calls.append(("save-static", animation_id, color, zones))
+
 
 class LightingSettingsTest(unittest.TestCase):
     def test_valid_static_settings(self):
@@ -69,7 +72,7 @@ class AwElcBackendTest(unittest.TestCase):
         self.assertEqual(backend.info.platform, "0x0e09")
         self.assertEqual(backend.info.zones, 1)
         self.assertEqual(backend.capabilities.effects, {LightingEffect.STATIC})
-        self.assertFalse(backend.capabilities.persistent_power_states)
+        self.assertTrue(backend.capabilities.persistent_power_states)
 
     def test_applies_static_color_and_inverse_dimness(self):
         protocol = FakeProtocol()
@@ -83,10 +86,15 @@ class AwElcBackendTest(unittest.TestCase):
         backend.apply_lighting(settings)
         self.assertEqual(
             protocol.calls,
-            [("dimness", 25, (0,)), ("color", (20, 40, 60), (0,))],
+            [
+                ("save-static", 0x5C, (20, 40, 60), (0,)),
+                ("save-static", 0x5D, (20, 40, 60), (0,)),
+                ("save-static", 0x5F, (20, 40, 60), (0,)),
+                ("dimness", 25, (0,)),
+            ],
         )
 
-    def test_disabling_writes_black_without_changing_dimness(self):
+    def test_disabling_saves_black_for_awake_power_states(self):
         protocol = FakeProtocol()
         backend = AwElcBackend(protocol)
         backend.apply_lighting(
@@ -97,7 +105,15 @@ class AwElcBackendTest(unittest.TestCase):
                 brightness=75,
             )
         )
-        self.assertEqual(protocol.calls, [("color", (0, 0, 0), (0,))])
+        self.assertEqual(
+            protocol.calls,
+            [
+                ("save-static", 0x5C, (0, 0, 0), (0,)),
+                ("save-static", 0x5D, (0, 0, 0), (0,)),
+                ("save-static", 0x5F, (0, 0, 0), (0,)),
+                ("dimness", 25, (0,)),
+            ],
+        )
 
 
 if __name__ == "__main__":
